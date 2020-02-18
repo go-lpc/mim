@@ -4,7 +4,7 @@
 [![Build Status](https://travis-ci.org/go-lpc/mim.svg?branch=master)](https://travis-ci.org/go-lpc/mim)
 [![codecov](https://codecov.io/gh/go-lpc/mim/branch/master/graph/badge.svg)](https://codecov.io/gh/go-lpc/mim)
 [![Go Report Card](https://goreportcard.com/badge/github.com/go-lpc/mim)](https://goreportcard.com/report/github.com/go-lpc/mim)
-[![GoDoc](https://godoc.org/go-lpc.org/x/hep?status.svg)](https://godoc.org/go-lpc.org/x/hep)
+[![GoDoc](https://godoc.org/github.com/go-lpc/mim?status.svg)](https://godoc.org/github.com/go-lpc/mim)
 [![License](https://img.shields.io/badge/License-BSD--3-blue.svg)](https://github.com/go-lpc/mim/blob/master/LICENSE)
 
 
