@@ -2,7 +2,7 @@
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file.
 
-package difreadout
+package dif
 
 import (
 	"bytes"
@@ -12,7 +12,10 @@ import (
 	"golang.org/x/xerrors"
 )
 
-func TestEncode(t *testing.T) {
+func TestReadout(t *testing.T) {
+	const (
+		difID = 0x42
+	)
 	for _, tc := range []struct {
 		name string
 		raw  []byte
@@ -27,7 +30,7 @@ func TestEncode(t *testing.T) {
 			name: "normal-global-header",
 			raw: []byte{
 				gbHeader,
-				0x42,                         // dif-id
+				difID,
 				0, 1, 2, 3, 4, 5, 6, 7, 8, 9, // hdr-0
 				0, 1, 2, 3, 4, 5, 6, 7, 8, 9, // hdr-1
 				0, 1, // hdr-2
@@ -54,7 +57,7 @@ func TestEncode(t *testing.T) {
 			name: "normal-global-header-0xbb-version",
 			raw: []byte{
 				gbHeaderB,
-				0x42,                         // dif-id
+				difID,
 				0, 1, 2, 3, 4, 5, 6, 7, 8, 9, // hdr-0
 				0, 1, 2, 3, 4, 5, 6, 7, 8, 9, // hdr-1
 				0, 1, 2, 3, 4, 5, 6, 7, 8, 9, // hdr-2
@@ -103,42 +106,42 @@ func TestEncode(t *testing.T) {
 			name: "invalid-dif-id",
 			raw: []byte{
 				gbHeader,
-				0x44,                         // dif-id
+				difID + 1,
 				0, 1, 2, 3, 4, 5, 6, 7, 8, 9, // hdr-0
 				0, 1, 2, 3, 4, 5, 6, 7, 8, 9, // hdr-1
 				0, 1, // hdr-2
 			},
-			want: xerrors.Errorf("difreadout: invalid DIF ID (got=0x44, want=0x42)"),
+			want: xerrors.Errorf("difreadout: invalid DIF ID (got=0x%x, want=0x%x)", difID+1, difID),
 		},
 		{
 			name: "short-frame-header",
 			raw: []byte{
 				gbHeader,
-				0x42,                         // dif-id
+				difID,
 				0, 1, 2, 3, 4, 5, 6, 7, 8, 9, // hdr-0
 				0, 1, 2, 3, 4, 5, 6, 7, 8, 9, // hdr-1
 				0, 1, // hdr-2
 			},
-			want: xerrors.Errorf("difreadout: DIF 0x42 could not read frame header/global trailer: %w", io.EOF),
+			want: xerrors.Errorf("difreadout: DIF 0x%x could not read frame header/global trailer: %w", difID, io.EOF),
 		},
 		{
 			name: "analog-frame-header",
 			raw: []byte{
 				gbHeader,
-				0x42,                         // dif-id
+				difID,
 				0, 1, 2, 3, 4, 5, 6, 7, 8, 9, // hdr-0
 				0, 1, 2, 3, 4, 5, 6, 7, 8, 9, // hdr-1
 				0, 1, // hdr-2
 
-				0xC4, // analog frame header
+				anHeader, // analog frame header
 			},
-			want: xerrors.Errorf("difreadout: DIF 0x42 contains an analog frame"),
+			want: xerrors.Errorf("difreadout: DIF 0x%x contains an analog frame", difID),
 		},
 		{
 			name: "invalid-frame-header",
 			raw: []byte{
 				gbHeader,
-				0x42,                         // dif-id
+				difID,
 				0, 1, 2, 3, 4, 5, 6, 7, 8, 9, // hdr-0
 				0, 1, 2, 3, 4, 5, 6, 7, 8, 9, // hdr-1
 				0, 1, // hdr-2
@@ -150,13 +153,13 @@ func TestEncode(t *testing.T) {
 				30, 31, 32, 33, 34, 35, 36, 37, // data-2
 				frTrailer,
 			},
-			want: xerrors.Errorf("difreadout: DIF 0x42 invalid frame/global marker (got=0x%x)", frHeader+1),
+			want: xerrors.Errorf("difreadout: DIF 0x%x invalid frame/global marker (got=0x%x)", difID, frHeader+1),
 		},
 		{
 			name: "short-frame-header",
 			raw: []byte{
 				gbHeader,
-				0x42,                         // dif-id
+				difID,
 				0, 1, 2, 3, 4, 5, 6, 7, 8, 9, // hdr-0
 				0, 1, 2, 3, 4, 5, 6, 7, 8, 9, // hdr-1
 				0, 1, // hdr-2
@@ -165,31 +168,31 @@ func TestEncode(t *testing.T) {
 				1, // hardroc header
 				frTrailer,
 			},
-			want: xerrors.Errorf("difreadout: DIF 0x42 could not read hardroc frame: %w", io.ErrUnexpectedEOF),
+			want: xerrors.Errorf("difreadout: DIF 0x%x could not read hardroc frame: %w", difID, io.ErrUnexpectedEOF),
 		},
 		{
 			name: "incomplete-frame",
 			raw: []byte{
 				gbHeader,
-				0x42,                         // dif-id
+				difID,
 				0, 1, 2, 3, 4, 5, 6, 7, 8, 9, // hdr-0
 				0, 1, 2, 3, 4, 5, 6, 7, 8, 9, // hdr-1
 				0, 1, // hdr-2
 
 				frHeader,
-				0xC3,
+				incFrame,
 				10, 11, 12, // bcid
 				20, 21, 22, 23, 24, 25, 26, 27, // data-1
 				30, 31, 32, 33, 34, 35, 36, 37, // data-2
 				frTrailer,
 			},
-			want: xerrors.Errorf("difreadout: DIF 0x42 received an incomplete frame"),
+			want: xerrors.Errorf("difreadout: DIF 0x%x received an incomplete frame", difID),
 		},
 		{
 			name: "missing-global-trailer",
 			raw: []byte{
 				gbHeader,
-				0x42,                         // dif-id
+				difID,
 				0, 1, 2, 3, 4, 5, 6, 7, 8, 9, // hdr-0
 				0, 1, 2, 3, 4, 5, 6, 7, 8, 9, // hdr-1
 				0, 1, // hdr-2
@@ -208,13 +211,13 @@ func TestEncode(t *testing.T) {
 				30, 31, 32, 33, 34, 35, 36, 37, // data-2
 				frTrailer,
 			},
-			want: xerrors.Errorf("difreadout: DIF 0x42 could not read frame header/global trailer: %w", io.EOF),
+			want: xerrors.Errorf("difreadout: DIF 0x%x could not read frame header/global trailer: %w", difID, io.EOF),
 		},
 		{
 			name: "invalid-global-trailer",
 			raw: []byte{
 				gbHeader,
-				0x42,                         // dif-id
+				difID,
 				0, 1, 2, 3, 4, 5, 6, 7, 8, 9, // hdr-0
 				0, 1, 2, 3, 4, 5, 6, 7, 8, 9, // hdr-1
 				0, 1, // hdr-2
@@ -235,13 +238,13 @@ func TestEncode(t *testing.T) {
 
 				gbTrailer + 1,
 			},
-			want: xerrors.Errorf("difreadout: DIF 0x42 invalid frame/global marker (got=0x%x)", gbTrailer+1),
+			want: xerrors.Errorf("difreadout: DIF 0x%x invalid frame/global marker (got=0x%x)", difID, gbTrailer+1),
 		},
 		{
 			name: "missing-crc-16",
 			raw: []byte{
 				gbHeader,
-				0x42,                         // dif-id
+				difID,
 				0, 1, 2, 3, 4, 5, 6, 7, 8, 9, // hdr-0
 				0, 1, 2, 3, 4, 5, 6, 7, 8, 9, // hdr-1
 				0, 1, // hdr-2
@@ -262,13 +265,13 @@ func TestEncode(t *testing.T) {
 
 				gbTrailer,
 			},
-			want: xerrors.Errorf("difreadout: DIF 0x42 could not receive CRC-16: %w", io.EOF),
+			want: xerrors.Errorf("difreadout: DIF 0x%x could not receive CRC-16: %w", difID, io.EOF),
 		},
 		{
 			name: "short-crc-16",
 			raw: []byte{
 				gbHeader,
-				0x42,                         // dif-id
+				difID,
 				0, 1, 2, 3, 4, 5, 6, 7, 8, 9, // hdr-0
 				0, 1, 2, 3, 4, 5, 6, 7, 8, 9, // hdr-1
 				0, 1, // hdr-2
@@ -290,13 +293,13 @@ func TestEncode(t *testing.T) {
 				gbTrailer,
 				0xb5, // CRC-16
 			},
-			want: xerrors.Errorf("difreadout: DIF 0x42 could not receive CRC-16: %w", io.ErrUnexpectedEOF),
+			want: xerrors.Errorf("difreadout: DIF 0x%x could not receive CRC-16: %w", difID, io.ErrUnexpectedEOF),
 		},
 		{
 			name: "invalid-crc-16",
 			raw: []byte{
 				gbHeader,
-				0x42,                         // dif-id
+				difID,
 				0, 1, 2, 3, 4, 5, 6, 7, 8, 9, // hdr-0
 				0, 1, 2, 3, 4, 5, 6, 7, 8, 9, // hdr-1
 				0, 1, // hdr-2
@@ -318,17 +321,20 @@ func TestEncode(t *testing.T) {
 				gbTrailer,
 				0xb5, 0xff, // CRC-16
 			},
-			want: xerrors.Errorf("difreadout: DIF 0x42 inconsistent CRC: recv=0xb5ff comp=0x4c1a"),
+			want: xerrors.Errorf("difreadout: DIF 0x%x inconsistent CRC: recv=0xb5ff comp=0x4c1a", difID),
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			buf := bytes.NewReader(tc.raw)
-			err := Encode(new(bytes.Buffer), buf, 0x42)
+			r := bytes.NewReader(tc.raw)
+			w := new(bytes.Buffer)
+			err := NewReadout(difID, w, r).Readout()
 			switch {
 			case err != nil && tc.want == nil:
 				t.Fatalf("got=%v, want=%v", err, tc.want)
 			case err == nil && tc.want == nil:
-				// ok.
+				if got, want := w.Bytes(), tc.raw; !bytes.Equal(got, want) {
+					t.Fatalf("invalid output readout data:\ngot= %v\nwant=%v\n", got, want)
+				}
 			case err != nil && tc.want != nil:
 				if got, want := err.Error(), tc.want.Error(); got != want {
 					t.Fatalf("invalid error:\ngot: %+v\nwant:%+v\n", got, want)
