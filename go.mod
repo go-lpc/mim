@@ -7,4 +7,5 @@ require (
 	github.com/peterh/liner v1.1.0
 	golang.org/x/net v0.0.0-20200202094626-16171245cfb2 // indirect
 	golang.org/x/sys v0.0.0-20200217220822-9197077df867 // indirect
+	golang.org/x/xerrors v0.0.0-20191204190536-9bdfabe68543
 )
