@@ -73,7 +73,9 @@ func newShell(cfg config.RunCtl, rc *tdaq.RunControl) *liner.State {
 			select {
 			case <-quit:
 			default:
-				go rc.Do(ctx, tdaq.CmdQuit)
+				go func() {
+					_ = rc.Do(ctx, tdaq.CmdQuit)
+				}()
 			}
 		}()
 

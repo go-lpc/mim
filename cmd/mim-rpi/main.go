@@ -116,6 +116,4 @@ func (dev *rpi) run(ctx tdaq.Context) error {
 		}
 		time.Sleep(100 * time.Millisecond)
 	}
-
-	return nil
 }
