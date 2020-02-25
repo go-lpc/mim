@@ -95,7 +95,7 @@ func (dec *Decoder) Decode(dif *DIF) error {
 	dif.Header.DTC = binary.BigEndian.Uint32(hdr[1 : 1+4])
 	dif.Header.ATC = binary.BigEndian.Uint32(hdr[5 : 5+4])
 	dif.Header.GTC = binary.BigEndian.Uint32(hdr[9 : 9+4])
-	copy(dif.Header.AbsBCID[:], hdr[13:15+4])
+	copy(dif.Header.AbsBCID[:], hdr[13:13+6])
 	copy(dif.Header.TimeDIFTC[:], hdr[19:19+3])
 	dif.Frames = dif.Frames[:0]
 
@@ -203,8 +203,9 @@ func (dec *Decoder) readU8() uint8 {
 }
 
 func (dec *Decoder) readU16() uint16 {
-	dec.load(2)
-	return binary.BigEndian.Uint16(dec.buf[:2])
+	const n = 2
+	dec.load(n)
+	return binary.BigEndian.Uint16(dec.buf[:n])
 }
 
 func (dec *Decoder) load(n int) {

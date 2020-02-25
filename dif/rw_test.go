@@ -7,10 +7,116 @@ package dif
 import (
 	"bytes"
 	"io"
+	"reflect"
 	"testing"
 
 	"golang.org/x/xerrors"
 )
+
+func TestCodec(t *testing.T) {
+	const (
+		difID = 0x42
+	)
+
+	for _, tc := range []struct {
+		name string
+		dif  DIF
+	}{
+		{
+			name: "normal",
+			dif: DIF{
+				Header: GlobalHeader{
+					ID:        difID,
+					DTC:       10,
+					ATC:       11,
+					GTC:       12,
+					AbsBCID:   [6]uint8{1, 2, 3, 4, 5, 6},
+					TimeDIFTC: [3]uint8{10, 11, 12},
+				},
+				Frames: []Frame{
+					{
+						Header: 1,
+						BCID:   [3]uint8{10, 11, 12},
+						Data:   [16]uint8{0xa, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15},
+					},
+					{
+						Header: 2,
+						BCID:   [3]uint8{20, 21, 22},
+						Data: [16]uint8{
+							0xb, 21, 22, 23, 24, 25, 26, 27, 28, 29,
+							210, 211, 212, 213, 214, 215,
+						},
+					},
+				},
+			},
+		},
+		{
+			name: "no-frame",
+			dif: DIF{
+				Header: GlobalHeader{
+					ID:        difID,
+					DTC:       10,
+					ATC:       11,
+					GTC:       12,
+					AbsBCID:   [6]uint8{1, 2, 3, 4, 5, 6},
+					TimeDIFTC: [3]uint8{10, 11, 12},
+				},
+			},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			buf := new(bytes.Buffer)
+			enc := NewEncoder(buf)
+			err := enc.Encode(&tc.dif)
+			if err != nil {
+				t.Fatalf("could not encode dif frames: %+v", err)
+			}
+
+			dec := NewDecoder(difID, buf)
+			var got DIF
+			err = dec.Decode(&got)
+			if err != nil {
+				t.Fatalf("could not decode dif frames: %+v", err)
+			}
+
+			if got, want := got, tc.dif; !reflect.DeepEqual(got, want) {
+				t.Fatalf("invalid r/w round-trip:\ngot= %#v\nwant=%#v", got, want)
+			}
+		})
+	}
+}
+
+func TestEncoder(t *testing.T) {
+	{
+		buf := new(bytes.Buffer)
+		enc := NewEncoder(buf)
+
+		if got, want := enc.Encode(nil), error(nil); got != want {
+			t.Fatalf("invalid nil-dif encoding: got=%v, want=%v", got, want)
+		}
+	}
+	{
+		buf := failingWriter{n: 0}
+		enc := NewEncoder(&buf)
+		if got, want := enc.Encode(&DIF{}), xerrors.Errorf("dif: could not write global header marker: %w", io.ErrUnexpectedEOF); got.Error() != want.Error() {
+			t.Fatalf("invalid error:\ngot= %+v\nwant=%+v", got, want)
+		}
+	}
+
+}
+
+type failingWriter struct {
+	n   int
+	cur int
+}
+
+func (w *failingWriter) Write(p []byte) (int, error) {
+	w.cur += len(p)
+	if w.cur >= w.n {
+		return 0, io.ErrUnexpectedEOF
+	}
+	return len(p), nil
+}
 
 func TestDecoder(t *testing.T) {
 	const (
