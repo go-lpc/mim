@@ -12,6 +12,9 @@ import (
 	"golang.org/x/xerrors"
 )
 
+// Encoder writes DIF data to an output stream.
+// Encoder computes the CRC-16 checksum on the fly and appends it
+// at the end of the stream.
 type Encoder struct {
 	w   io.Writer
 	buf []byte
@@ -19,6 +22,7 @@ type Encoder struct {
 	crc crc16.Hash16
 }
 
+// NewEncoder returns a new Encoder that writes to w.
 func NewEncoder(w io.Writer) *Encoder {
 	return &Encoder{
 		w:   w,
@@ -35,6 +39,8 @@ func (enc *Encoder) reset() {
 	enc.crc.Reset()
 }
 
+// Encode writes the DIF data to the stream, computes the corresponding
+// CRC-16 checksum on the fly and appends it to the stream.
 func (enc *Encoder) Encode(dif *DIF) error {
 	if dif == nil {
 		return nil

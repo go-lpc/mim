@@ -12,23 +12,8 @@ import (
 	"golang.org/x/xerrors"
 )
 
-const (
-	//	scHeader  = 0xb1 // slow-control header marker
-	//	scTrailer = 0xa1 // slow-control trailer marker
-
-	gbHeader  = 0xb0 // global header marker
-	gbHeaderB = 0xbb // global header marker (0xBB variant)
-	gbTrailer = 0xa0 // global trailer marker
-
-	frHeader  = 0xb4 // frame header marker
-	frTrailer = 0xa3 // frame trailer marker
-
-	anHeader = 0xc4 // analog frame header marker
-	incFrame = 0xc3 // incomplete frame marker
-)
-
-// Decoder reads (and validates) data from an underlying data source.
-// Decoder computes CRC-16 checksums on the fly, during the
+// Decoder reads and decodes DIF data from an input stream.
+// Decoder computes the CRC-16 checksums on the fly, during the
 // acquisition of DIF Frames.
 type Decoder struct {
 	r io.Reader
@@ -39,7 +24,7 @@ type Decoder struct {
 	crc crc16.Hash16
 }
 
-// NewDecoder creates a decoder that reads and validates data from r.
+// NewDecoder returns a new Decoder that reads from r.
 func NewDecoder(difID uint8, r io.Reader) *Decoder {
 	return &Decoder{
 		r:   r,
@@ -57,6 +42,8 @@ func (dec *Decoder) reset() {
 	dec.crc.Reset()
 }
 
+// Decode reads the next DIF data from its input stream and stores it
+// in the value pointed by dif.
 func (dec *Decoder) Decode(dif *DIF) error {
 	dec.reset()
 
