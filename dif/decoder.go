@@ -103,6 +103,7 @@ loop:
 				dec.dif, dec.err,
 			)
 		}
+		dec.crcU8(v)
 
 		switch v {
 		default:
@@ -113,7 +114,6 @@ loop:
 			return xerrors.Errorf("dif: DIF 0x%x contains an analog frame", dec.dif)
 
 		case frHeader:
-			dec.crcU8(v)
 		frameLoop:
 			for {
 				v := dec.readU8()

@@ -68,8 +68,9 @@ func (enc *Encoder) Encode(dif *DIF) error {
 		enc.write(frame.Data[:])
 	}
 	enc.writeU8(frTrailer)
-	crc := enc.crc.Sum16() // gb-trailer not part of CRC-16
 	enc.writeU8(gbTrailer)
+
+	crc := enc.crc.Sum16()
 	enc.writeU16(crc)
 
 	return enc.err

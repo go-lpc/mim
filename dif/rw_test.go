@@ -159,7 +159,7 @@ func TestDecoder(t *testing.T) {
 				frTrailer,
 
 				gbTrailer,
-				0x4c, 0x1a, // CRC-16
+				0x26, 0xa2, // CRC-16
 			},
 		},
 		{
@@ -187,7 +187,7 @@ func TestDecoder(t *testing.T) {
 				frTrailer,
 
 				gbTrailer,
-				0x4c, 0x1a, // CRC-16
+				0x26, 0xa2, // CRC-16
 
 				gbHeader,
 				difID,
@@ -210,7 +210,7 @@ func TestDecoder(t *testing.T) {
 				frTrailer,
 
 				gbTrailer,
-				0xfa, 0x67, // CRC-16
+				0x9c, 0xbf, // CRC-16
 			},
 		},
 		{
@@ -239,7 +239,7 @@ func TestDecoder(t *testing.T) {
 				frTrailer,
 
 				gbTrailer,
-				0x52, 0x3f, // CRC-16
+				0xf0, 0x5d, // CRC-16
 			},
 		},
 		{
@@ -510,7 +510,7 @@ func TestDecoder(t *testing.T) {
 				gbTrailer,
 				0xb5, 0xff, // CRC-16
 			},
-			want: xerrors.Errorf("dif: DIF 0x%x inconsistent CRC: recv=0xb5ff comp=0x4c1a", difID),
+			want: xerrors.Errorf("dif: DIF 0x%x inconsistent CRC: recv=0xb5ff comp=0x26a2", difID),
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
