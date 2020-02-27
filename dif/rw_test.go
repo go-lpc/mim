@@ -30,18 +30,18 @@ func TestCodec(t *testing.T) {
 					DTC:       10,
 					ATC:       11,
 					GTC:       12,
-					AbsBCID:   [6]uint8{1, 2, 3, 4, 5, 6},
-					TimeDIFTC: [3]uint8{10, 11, 12},
+					AbsBCID:   0x0000112233445566,
+					TimeDIFTC: 0x00112233,
 				},
 				Frames: []Frame{
 					{
 						Header: 1,
-						BCID:   [3]uint8{10, 11, 12},
+						BCID:   0x001a1b1c,
 						Data:   [16]uint8{0xa, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15},
 					},
 					{
 						Header: 2,
-						BCID:   [3]uint8{20, 21, 22},
+						BCID:   0x002a2b2c,
 						Data: [16]uint8{
 							0xb, 21, 22, 23, 24, 25, 26, 27, 28, 29,
 							210, 211, 212, 213, 214, 215,
@@ -58,8 +58,8 @@ func TestCodec(t *testing.T) {
 					DTC:       10,
 					ATC:       11,
 					GTC:       12,
-					AbsBCID:   [6]uint8{1, 2, 3, 4, 5, 6},
-					TimeDIFTC: [3]uint8{10, 11, 12},
+					AbsBCID:   0x00001234aabbccdd,
+					TimeDIFTC: 0x00112233,
 				},
 			},
 		},

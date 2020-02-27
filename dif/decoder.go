@@ -82,8 +82,8 @@ func (dec *Decoder) Decode(dif *DIF) error {
 	dif.Header.DTC = binary.BigEndian.Uint32(hdr[1 : 1+4])
 	dif.Header.ATC = binary.BigEndian.Uint32(hdr[5 : 5+4])
 	dif.Header.GTC = binary.BigEndian.Uint32(hdr[9 : 9+4])
-	copy(dif.Header.AbsBCID[:], hdr[13:13+6])
-	copy(dif.Header.TimeDIFTC[:], hdr[19:19+3])
+	dif.Header.AbsBCID = u64FromU48(hdr[13 : 13+6])
+	dif.Header.TimeDIFTC = u32FromU24(hdr[19 : 19+3])
 	dif.Frames = dif.Frames[:0]
 
 	//	var (
@@ -138,8 +138,10 @@ loop:
 						)
 					}
 					dec.crcw(hrData)
-					frame := Frame{Header: v}
-					copy(frame.BCID[:], hrData[0:3])
+					frame := Frame{
+						Header: v,
+						BCID:   u32FromU24(hrData[:3]),
+					}
 					copy(frame.Data[:], hrData[3:3+16])
 					dif.Frames = append(dif.Frames, frame)
 
@@ -209,4 +211,15 @@ func (dec *Decoder) load(n int) {
 func (dec *Decoder) crcU8(v uint8) {
 	dec.buf[0] = v
 	dec.crcw(dec.buf[:1])
+}
+
+func u64FromU48(v []uint8) uint64 {
+	_ = v[5]
+	return uint64(v[0])<<40 | uint64(v[1])<<32 |
+		uint64(v[2])<<24 | uint64(v[3])<<16 | uint64(v[4])<<8 | uint64(v[5])
+}
+
+func u32FromU24(v []uint8) uint32 {
+	_ = v[2]
+	return uint32(v[0])<<16 | uint32(v[1])<<8 | uint32(v[2])
 }

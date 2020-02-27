@@ -57,14 +57,14 @@ func (enc *Encoder) Encode(dif *DIF) error {
 	enc.writeU32(dif.Header.DTC)
 	enc.writeU32(dif.Header.ATC)
 	enc.writeU32(dif.Header.GTC)
-	enc.write(dif.Header.AbsBCID[:])
-	enc.write(dif.Header.TimeDIFTC[:])
+	enc.writeU48(dif.Header.AbsBCID)
+	enc.writeU24(dif.Header.TimeDIFTC)
 	enc.writeU8(0) // nlines
 
 	enc.writeU8(frHeader)
 	for _, frame := range dif.Frames {
 		enc.writeU8(frame.Header)
-		enc.write(frame.BCID[:])
+		enc.writeU24(frame.BCID)
 		enc.write(frame.Data[:])
 	}
 	enc.writeU8(frTrailer)
@@ -101,6 +101,27 @@ func (enc *Encoder) writeU32(v uint32) {
 	const n = 4
 	enc.reserve(n)
 	binary.BigEndian.PutUint32(enc.buf[:n], v)
+	enc.write(enc.buf[:n])
+}
+
+func (enc *Encoder) writeU24(v uint32) {
+	const n = 3
+	enc.reserve(n)
+	enc.buf[0] = byte(v >> 16)
+	enc.buf[1] = byte(v >> 8)
+	enc.buf[2] = byte(v >> 0)
+	enc.write(enc.buf[:n])
+}
+
+func (enc *Encoder) writeU48(v uint64) {
+	const n = 6
+	enc.reserve(n)
+	enc.buf[0] = byte(v >> 40)
+	enc.buf[1] = byte(v >> 32)
+	enc.buf[2] = byte(v >> 24)
+	enc.buf[3] = byte(v >> 16)
+	enc.buf[4] = byte(v >> 8)
+	enc.buf[5] = byte(v >> 0)
 	enc.write(enc.buf[:n])
 }
 

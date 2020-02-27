@@ -5,6 +5,7 @@
 // Package dif holds functions to manipulate data from DIFs.
 package dif // import "github.com/go-lpc/mim/dif"
 
+// DIF represents a detector interface.
 type DIF struct {
 	Header GlobalHeader
 	Frames []Frame
@@ -12,16 +13,16 @@ type DIF struct {
 
 type GlobalHeader struct {
 	ID        uint8
-	DTC       uint32   // DIF trigger counter
-	ATC       uint32   // Acquisition trigger counter
-	GTC       uint32   // Global trigger counter
-	AbsBCID   [6]uint8 // Absolute BCID
-	TimeDIFTC [3]uint8 // Time DIF trigger counter
+	DTC       uint32 // DIF trigger counter
+	ATC       uint32 // Acquisition trigger counter
+	GTC       uint32 // Global trigger counter
+	AbsBCID   uint64 // Absolute BCID
+	TimeDIFTC uint32 // Time DIF trigger counter
 }
 
 type Frame struct {
 	Header uint8 // Hardroc header
-	BCID   [3]uint8
+	BCID   uint32
 	Data   [16]uint8
 }
 
