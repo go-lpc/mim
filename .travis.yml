@@ -40,6 +40,9 @@ notifications:
     on_success: always
     on_failure: always
 
+before_install:
+ - sudo apt-get install -qq pkg-config libftdi1-dev
+
 script:
  - go get -d -t -v ./...
  - go install -v $TAGS ./...
