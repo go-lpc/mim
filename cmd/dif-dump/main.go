@@ -2,7 +2,24 @@
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file.
 
-// Command dif-dump decodes and displays DIF data.
+// dif-dump decodes and displays DIF data files.
+//
+// Usage: dif-dump [OPTIONS] FILE1 [FILE2 [FILE3 ...]]
+//
+// Example:
+//
+//  $> dif-dump ./testdata/Event_425050855_109_109_183
+//  === DIF-ID 0xb7 ===
+//  DIF trigger:        109
+//  ACQ trigger:          0
+//  Gbl trigger:        109
+//  Abs BCID:     425050855
+//  Time DIF:       1864732
+//  Frames:             183
+//    hroc=0x01 BCID= 1448778 000000000000000000000000000005f0
+//    hroc=0x01 BCID= 1533835 0400000055b955540000040000000000
+//    hroc=0x01 BCID= 1520655 00000010000000000000000000000000
+//  [...]
 package main
 
 import (
@@ -20,12 +37,49 @@ func main() {
 	log.SetPrefix("dif-dump: ")
 	log.SetFlags(0)
 
-	flag.Parse()
-	fname := flag.Arg(0)
+	flag.Usage = func() {
+		fmt.Printf(`dif-dump decodes and displays DIF data files.
 
+Usage: dif-dump [OPTIONS] FILE1 [FILE2 [FILE3 ...]]
+
+Example:
+
+ $> dif-dump ./testdata/Event_425050855_109_109_183
+ === DIF-ID 0xb7 ===
+ DIF trigger:        109
+ ACQ trigger:          0
+ Gbl trigger:        109
+ Abs BCID:     425050855
+ Time DIF:       1864732
+ Frames:             183
+   hroc=0x01 BCID= 1448778 000000000000000000000000000005f0
+   hroc=0x01 BCID= 1533835 0400000055b955540000040000000000
+   hroc=0x01 BCID= 1520655 00000010000000000000000000000000
+ [...]
+
+`)
+		flag.PrintDefaults()
+	}
+
+	flag.Parse()
+
+	if flag.NArg() == 0 {
+		flag.Usage()
+		log.Fatalf("missing path to input DIF file")
+	}
+
+	for _, fname := range flag.Args() {
+		err := process(os.Stdout, fname)
+		if err != nil {
+			log.Fatalf("could not dump file %q: %+v", fname, err)
+		}
+	}
+}
+
+func process(w io.Writer, fname string) error {
 	f, err := os.Open(fname)
 	if err != nil {
-		log.Fatalf("could not open %q: %+v", fname, err)
+		return xerrors.Errorf("could not open %q: %w", fname, err)
 	}
 	defer f.Close()
 
@@ -38,22 +92,24 @@ loop:
 			if xerrors.Is(err, io.EOF) {
 				break loop
 			}
-			log.Fatalf("could not decode DIF: %+v", err)
+			return xerrors.Errorf("could not decode DIF: %w", err)
 		}
-		fmt.Printf("=== DIF-ID 0x%x ===\n", d.Header.ID)
-		fmt.Printf("DIF trigger: % 10d\n", d.Header.DTC)
-		fmt.Printf("ACQ trigger: % 10d\n", d.Header.ATC)
-		fmt.Printf("Gbl trigger: % 10d\n", d.Header.GTC)
-		fmt.Printf("Abs BCID:    % 10d\n", d.Header.AbsBCID)
-		fmt.Printf("Time DIF:    % 10d\n", d.Header.TimeDIFTC)
-		fmt.Printf("Frames:      % 10d\n", len(d.Frames))
+		fmt.Fprintf(w, "=== DIF-ID 0x%x ===\n", d.Header.ID)
+		fmt.Fprintf(w, "DIF trigger: % 10d\n", d.Header.DTC)
+		fmt.Fprintf(w, "ACQ trigger: % 10d\n", d.Header.ATC)
+		fmt.Fprintf(w, "Gbl trigger: % 10d\n", d.Header.GTC)
+		fmt.Fprintf(w, "Abs BCID:    % 10d\n", d.Header.AbsBCID)
+		fmt.Fprintf(w, "Time DIF:    % 10d\n", d.Header.TimeDIFTC)
+		fmt.Fprintf(w, "Frames:      % 10d\n", len(d.Frames))
 
 		for _, frame := range d.Frames {
-			fmt.Printf("  hroc=0x%02x BCID=% 8d %x\n",
+			fmt.Fprintf(w, "  hroc=0x%02x BCID=% 8d %x\n",
 				frame.Header, frame.BCID, frame.Data,
 			)
 		}
 	}
+
+	return nil
 }
 
 func difIDFrom(f io.ReaderAt) uint8 {
