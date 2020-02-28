@@ -12,6 +12,7 @@ import (
 
 	"github.com/go-daq/tdaq/log"
 	"github.com/ziutek/ftdi"
+	"golang.org/x/xerrors"
 )
 
 func ftdiOpenTest(vid, pid uint16) (ftdiDevice, error) {
@@ -23,6 +24,19 @@ func TestReadout(t *testing.T) {
 	defer func() {
 		ftdiOpen = ftdiOpenImpl
 	}()
+
+	{
+		const name = "FT101xxx"
+		rdo, err := NewReadout(name, 0x6014, nil)
+		if err == nil {
+			rdo.close()
+			t.Fatalf("expected an error")
+		}
+		want := xerrors.Errorf("could not find DIF-id from %q: %s", name, xerrors.New("expected integer"))
+		if got, want := err.Error(), want.Error(); got != want {
+			t.Fatalf("invalid error:\ngot= %v\nwant=%v", got, want)
+		}
+	}
 
 	const (
 		name   = "FT101042"
