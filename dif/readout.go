@@ -21,6 +21,7 @@ const (
 	hardrocASIC  asicKind = 2
 )
 
+// Readout reads data out of a digital interface board (DIF).
 type Readout struct {
 	msg    log.MsgStream
 	dev    *device
@@ -40,6 +41,7 @@ type Readout struct {
 	temp [2]float32 // temperatures
 }
 
+// NewReadout creates a new DIF readout.
 func NewReadout(name string, prodID uint32, msg log.MsgStream) (*Readout, error) {
 	dev, err := newDevice(0x0403, uint16(prodID))
 	if err != nil {
@@ -59,7 +61,7 @@ func NewReadout(name string, prodID uint32, msg log.MsgStream) (*Readout, error)
 	rdo.reg.pd2daq = 0x4e
 	rdo.reg.daq2pd = 0x4e
 	rdo.reg.pd2pa = 0x4e
-	_, err = fmt.Sscanf(name, "FT101%d", &rdo.difID)
+	_, err = fmt.Sscanf(name, "FT101%03d", &rdo.difID)
 	if err != nil {
 		_ = dev.close()
 		return nil, xerrors.Errorf("could not find DIF-id from %q: %w", name, err)

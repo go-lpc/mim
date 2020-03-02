@@ -8,6 +8,7 @@ import (
 	"bytes"
 	"io"
 	"os"
+	"strings"
 	"testing"
 
 	"github.com/go-daq/tdaq/log"
@@ -25,17 +26,46 @@ func TestReadout(t *testing.T) {
 		ftdiOpen = ftdiOpenImpl
 	}()
 
-	{
-		const name = "FT101xxx"
-		rdo, err := NewReadout(name, 0x6014, nil)
-		if err == nil {
-			rdo.close()
-			t.Fatalf("expected an error")
-		}
-		want := xerrors.Errorf("could not find DIF-id from %q: %s", name, xerrors.New("expected integer"))
-		if got, want := err.Error(), want.Error(); got != want {
-			t.Fatalf("invalid error:\ngot= %v\nwant=%v", got, want)
-		}
+	for _, tc := range []struct {
+		name string
+		err  error
+		id   uint32
+	}{
+		{
+			name: "FT101xxx",
+			err:  xerrors.Errorf("could not find DIF-id from %q: %s", "FT101xxx", xerrors.New("expected integer")),
+		},
+		{
+			name: "FT101",
+			err:  xerrors.Errorf("could not find DIF-id from %q: %s", "FT101", io.EOF),
+		},
+		{
+			name: "FT10142",
+			id:   42,
+		},
+		{
+			name: "FT101042",
+			id:   42,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			rdo, err := NewReadout(tc.name, 0x6014, nil)
+			if err == nil && tc.err != nil {
+				rdo.close()
+				t.Fatalf("expected an error")
+			}
+			switch {
+			case tc.err != nil:
+				if got, want := err.Error(), tc.err.Error(); got != want {
+					t.Fatalf("invalid error:\ngot= %v\nwant=%v", got, want)
+				}
+			default:
+				defer rdo.close()
+				if rdo.difID != tc.id {
+					t.Fatalf("invalid DIF-id: got=%d, want=%d", rdo.difID, tc.id)
+				}
+			}
+		})
 	}
 
 	const (
@@ -46,6 +76,9 @@ func TestReadout(t *testing.T) {
 	rdo, err := NewReadout(name, prodID, log.NewMsgStream("readout-"+name, log.LvlDebug, os.Stderr))
 	if err != nil {
 		t.Fatalf("could not create readout: %+v", err)
+	}
+	if got, want := rdo.difID, uint32(42); got != want {
+		t.Fatalf("invalid DIF-ID: got=%d, want=%d", got, want)
 	}
 
 	err = rdo.configureRegisters()
@@ -118,6 +151,23 @@ func TestReadout(t *testing.T) {
 	err = rdo.close()
 	if err != nil {
 		t.Fatalf("could not close readout: %+v", err)
+	}
+}
+
+func TestInvalidReadout(t *testing.T) {
+	want := xerrors.Errorf("no such device")
+	ftdiOpen = func(vid, pid uint16) (ftdiDevice, error) { return nil, want }
+	defer func() {
+		ftdiOpen = ftdiOpenImpl
+	}()
+
+	rdo, err := NewReadout("FT101042", 0x6014, nil)
+	if err == nil {
+		_ = rdo.close()
+		t.Fatalf("expected an error, got=%v", err)
+	}
+	if got, want := err.Error(), want.Error(); !strings.Contains(got, want) {
+		t.Fatalf("invalid error.\ngot= %v\nwant=%v\n", got, want)
 	}
 }
 
