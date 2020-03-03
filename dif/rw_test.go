@@ -6,11 +6,10 @@ package dif
 
 import (
 	"bytes"
+	"fmt"
 	"io"
 	"reflect"
 	"testing"
-
-	"golang.org/x/xerrors"
 )
 
 func TestCodec(t *testing.T) {
@@ -98,7 +97,7 @@ func TestEncoder(t *testing.T) {
 	{
 		buf := failingWriter{n: 0}
 		enc := NewEncoder(&buf)
-		if got, want := enc.Encode(&DIF{}), xerrors.Errorf("dif: could not write global header marker: %w", io.ErrUnexpectedEOF); got.Error() != want.Error() {
+		if got, want := enc.Encode(&DIF{}), fmt.Errorf("dif: could not write global header marker: %w", io.ErrUnexpectedEOF); got.Error() != want.Error() {
 			t.Fatalf("invalid error:\ngot= %+v\nwant=%+v", got, want)
 		}
 	}
@@ -132,7 +131,7 @@ func TestDecoder(t *testing.T) {
 			name: "no data",
 			n:    1,
 			raw:  nil,
-			want: xerrors.Errorf("dif: could not read global header marker: %w", io.EOF),
+			want: fmt.Errorf("dif: could not read global header marker: %w", io.EOF),
 		},
 		{
 			name: "normal-global-header",
@@ -248,7 +247,7 @@ func TestDecoder(t *testing.T) {
 			raw: []byte{
 				gbHeader + 1,
 			},
-			want: xerrors.Errorf("dif: could not read global header marker (got=0x%x)", gbHeader+1),
+			want: fmt.Errorf("dif: could not read global header marker (got=0x%x)", gbHeader+1),
 		},
 		{
 			name: "invalid-dif-header-eof",
@@ -256,7 +255,7 @@ func TestDecoder(t *testing.T) {
 			raw: []byte{
 				gbHeader,
 			},
-			want: xerrors.Errorf("dif: could not read DIF header: %w", io.EOF),
+			want: fmt.Errorf("dif: could not read DIF header: %w", io.EOF),
 		},
 		{
 			name: "invalid-dif-header-unexpected-eof",
@@ -264,7 +263,7 @@ func TestDecoder(t *testing.T) {
 			raw: []byte{
 				gbHeader, 1, 2,
 			},
-			want: xerrors.Errorf("dif: could not read DIF header: %w", io.ErrUnexpectedEOF),
+			want: fmt.Errorf("dif: could not read DIF header: %w", io.ErrUnexpectedEOF),
 		},
 		{
 			name: "invalid-dif-id",
@@ -276,7 +275,7 @@ func TestDecoder(t *testing.T) {
 				0, 1, 2, 3, 4, 5, 6, 7, 8, 9, // hdr-1
 				0, 1, // hdr-2
 			},
-			want: xerrors.Errorf("dif: invalid DIF ID (got=0x%x, want=0x%x)", difID+1, difID),
+			want: fmt.Errorf("dif: invalid DIF ID (got=0x%x, want=0x%x)", difID+1, difID),
 		},
 		{
 			name: "short-frame-header",
@@ -288,7 +287,7 @@ func TestDecoder(t *testing.T) {
 				0, 1, 2, 3, 4, 5, 6, 7, 8, 9, // hdr-1
 				0, 1, // hdr-2
 			},
-			want: xerrors.Errorf("dif: DIF 0x%x could not read frame header/global trailer: %w", difID, io.EOF),
+			want: fmt.Errorf("dif: DIF 0x%x could not read frame header/global trailer: %w", difID, io.EOF),
 		},
 		{
 			name: "analog-frame-header",
@@ -302,7 +301,7 @@ func TestDecoder(t *testing.T) {
 
 				anHeader, // analog frame header
 			},
-			want: xerrors.Errorf("dif: DIF 0x%x contains an analog frame", difID),
+			want: fmt.Errorf("dif: DIF 0x%x contains an analog frame", difID),
 		},
 		{
 			name: "invalid-frame-header",
@@ -321,7 +320,7 @@ func TestDecoder(t *testing.T) {
 				30, 31, 32, 33, 34, 35, 36, 37, // data-2
 				frTrailer,
 			},
-			want: xerrors.Errorf("dif: DIF 0x%x invalid frame/global marker (got=0x%x)", difID, frHeader+1),
+			want: fmt.Errorf("dif: DIF 0x%x invalid frame/global marker (got=0x%x)", difID, frHeader+1),
 		},
 		{
 			name: "missing-hardroc-header",
@@ -335,7 +334,7 @@ func TestDecoder(t *testing.T) {
 
 				frHeader,
 			},
-			want: xerrors.Errorf("dif: DIF 0x%x could not read frame trailer/hardroc header: %w", difID, io.ErrUnexpectedEOF),
+			want: fmt.Errorf("dif: DIF 0x%x could not read frame trailer/hardroc header: %w", difID, io.ErrUnexpectedEOF),
 		},
 		{
 			name: "short-frame-header",
@@ -351,7 +350,7 @@ func TestDecoder(t *testing.T) {
 				1, // hardroc header
 				frTrailer,
 			},
-			want: xerrors.Errorf("dif: DIF 0x%x could not read hardroc frame: %w", difID, io.ErrUnexpectedEOF),
+			want: fmt.Errorf("dif: DIF 0x%x could not read hardroc frame: %w", difID, io.ErrUnexpectedEOF),
 		},
 		{
 			name: "incomplete-frame",
@@ -370,7 +369,7 @@ func TestDecoder(t *testing.T) {
 				30, 31, 32, 33, 34, 35, 36, 37, // data-2
 				frTrailer,
 			},
-			want: xerrors.Errorf("dif: DIF 0x%x received an incomplete frame", difID),
+			want: fmt.Errorf("dif: DIF 0x%x received an incomplete frame", difID),
 		},
 		{
 			name: "missing-global-trailer",
@@ -396,7 +395,7 @@ func TestDecoder(t *testing.T) {
 				30, 31, 32, 33, 34, 35, 36, 37, // data-2
 				frTrailer,
 			},
-			want: xerrors.Errorf("dif: DIF 0x%x could not read frame header/global trailer: %w", difID, io.EOF),
+			want: fmt.Errorf("dif: DIF 0x%x could not read frame header/global trailer: %w", difID, io.EOF),
 		},
 		{
 			name: "invalid-global-trailer",
@@ -424,7 +423,7 @@ func TestDecoder(t *testing.T) {
 
 				gbTrailer + 1,
 			},
-			want: xerrors.Errorf("dif: DIF 0x%x invalid frame/global marker (got=0x%x)", difID, gbTrailer+1),
+			want: fmt.Errorf("dif: DIF 0x%x invalid frame/global marker (got=0x%x)", difID, gbTrailer+1),
 		},
 		{
 			name: "missing-crc-16",
@@ -452,7 +451,7 @@ func TestDecoder(t *testing.T) {
 
 				gbTrailer,
 			},
-			want: xerrors.Errorf("dif: DIF 0x%x could not receive CRC-16: %w", difID, io.EOF),
+			want: fmt.Errorf("dif: DIF 0x%x could not receive CRC-16: %w", difID, io.EOF),
 		},
 		{
 			name: "short-crc-16",
@@ -481,7 +480,7 @@ func TestDecoder(t *testing.T) {
 				gbTrailer,
 				0xb5, // CRC-16
 			},
-			want: xerrors.Errorf("dif: DIF 0x%x could not receive CRC-16: %w", difID, io.ErrUnexpectedEOF),
+			want: fmt.Errorf("dif: DIF 0x%x could not receive CRC-16: %w", difID, io.ErrUnexpectedEOF),
 		},
 		{
 			name: "invalid-crc-16",
@@ -510,7 +509,7 @@ func TestDecoder(t *testing.T) {
 				gbTrailer,
 				0xb5, 0xff, // CRC-16
 			},
-			want: xerrors.Errorf("dif: DIF 0x%x inconsistent CRC: recv=0xb5ff comp=0x26a2", difID),
+			want: fmt.Errorf("dif: DIF 0x%x inconsistent CRC: recv=0xb5ff comp=0x26a2", difID),
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {

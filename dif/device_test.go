@@ -5,10 +5,9 @@
 package dif
 
 import (
+	"fmt"
 	"io"
 	"testing"
-
-	"golang.org/x/xerrors"
 )
 
 func TestFTDIOpen(t *testing.T) {
@@ -72,7 +71,7 @@ func TestDevice(t *testing.T) {
 				_, err := dev.usbRegRead(0x1234)
 				return err
 			},
-			want: xerrors.Errorf("could not write USB addr 0x%x: %w", 0x1234, io.EOF),
+			want: fmt.Errorf("could not write USB addr 0x%x: %w", 0x1234, io.EOF),
 		},
 		{
 			name: "usbRegRead-short-write",
@@ -81,7 +80,7 @@ func TestDevice(t *testing.T) {
 				_, err := dev.usbRegRead(0x1234)
 				return err
 			},
-			want: xerrors.Errorf("could not write USB addr 0x%x: %w", 0x1234, io.ErrShortWrite),
+			want: fmt.Errorf("could not write USB addr 0x%x: %w", 0x1234, io.ErrShortWrite),
 		},
 		{
 			name: "usbRegRead-err-read",
@@ -91,7 +90,7 @@ func TestDevice(t *testing.T) {
 				_, err := dev.usbRegRead(0x1234)
 				return err
 			},
-			want: xerrors.Errorf("could not read register 0x%x: %w", 0x1234, io.ErrUnexpectedEOF),
+			want: fmt.Errorf("could not read register 0x%x: %w", 0x1234, io.ErrUnexpectedEOF),
 		},
 		{
 			name: "usbCmdWrite-eof",
@@ -99,7 +98,7 @@ func TestDevice(t *testing.T) {
 				rw.ws = append(rw.ws, ierr{0, io.EOF})
 				return dev.usbCmdWrite(0x1234)
 			},
-			want: xerrors.Errorf("could not write USB command 0x%x: %w", 0x1234, io.EOF),
+			want: fmt.Errorf("could not write USB command 0x%x: %w", 0x1234, io.EOF),
 		},
 		{
 			name: "usbCmdWrite-short-write",
@@ -107,7 +106,7 @@ func TestDevice(t *testing.T) {
 				rw.ws = append(rw.ws, ierr{1, nil})
 				return dev.usbCmdWrite(0x1234)
 			},
-			want: xerrors.Errorf("could not write USB command 0x%x: %w", 0x1234, io.ErrShortWrite),
+			want: fmt.Errorf("could not write USB command 0x%x: %w", 0x1234, io.ErrShortWrite),
 		},
 		{
 			name: "usbRegWrite-eof",
@@ -115,7 +114,7 @@ func TestDevice(t *testing.T) {
 				rw.ws = append(rw.ws, ierr{0, io.EOF})
 				return dev.usbRegWrite(0x1234, 0x255)
 			},
-			want: xerrors.Errorf("could not write USB register (0x%x, 0x%x): %w", 0x1234, 0x255, io.EOF),
+			want: fmt.Errorf("could not write USB register (0x%x, 0x%x): %w", 0x1234, 0x255, io.EOF),
 		},
 		{
 			name: "usbRegWrite-short-write",
@@ -123,7 +122,7 @@ func TestDevice(t *testing.T) {
 				rw.ws = append(rw.ws, ierr{1, nil})
 				return dev.usbRegWrite(0x1234, 0x255)
 			},
-			want: xerrors.Errorf("could not write USB register (0x%x, 0x%x): %w", 0x1234, 0x255, io.ErrShortWrite),
+			want: fmt.Errorf("could not write USB register (0x%x, 0x%x): %w", 0x1234, 0x255, io.ErrShortWrite),
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {

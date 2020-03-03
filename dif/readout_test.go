@@ -6,6 +6,8 @@ package dif
 
 import (
 	"bytes"
+	"errors"
+	"fmt"
 	"io"
 	"os"
 	"strings"
@@ -13,7 +15,6 @@ import (
 
 	"github.com/go-daq/tdaq/log"
 	"github.com/ziutek/ftdi"
-	"golang.org/x/xerrors"
 )
 
 func ftdiOpenTest(vid, pid uint16) (ftdiDevice, error) {
@@ -33,11 +34,11 @@ func TestReadout(t *testing.T) {
 	}{
 		{
 			name: "FT101xxx",
-			err:  xerrors.Errorf("could not find DIF-id from %q: %s", "FT101xxx", xerrors.New("expected integer")),
+			err:  fmt.Errorf("could not find DIF-id from %q: %s", "FT101xxx", errors.New("expected integer")),
 		},
 		{
 			name: "FT101",
-			err:  xerrors.Errorf("could not find DIF-id from %q: %s", "FT101", io.EOF),
+			err:  fmt.Errorf("could not find DIF-id from %q: %s", "FT101", io.EOF),
 		},
 		{
 			name: "FT10142",
@@ -155,7 +156,7 @@ func TestReadout(t *testing.T) {
 }
 
 func TestInvalidReadout(t *testing.T) {
-	want := xerrors.Errorf("no such device")
+	want := fmt.Errorf("no such device")
 	ftdiOpen = func(vid, pid uint16) (ftdiDevice, error) { return nil, want }
 	defer func() {
 		ftdiOpen = ftdiOpenImpl

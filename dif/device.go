@@ -6,10 +6,10 @@ package dif
 
 import (
 	"encoding/binary"
+	"fmt"
 	"io"
 
 	"github.com/ziutek/ftdi"
-	"golang.org/x/xerrors"
 )
 
 type ftdiDevice interface {
@@ -45,14 +45,14 @@ func ftdiOpenImpl(vid, pid uint16) (ftdiDevice, error) {
 func newDevice(vid, pid uint16) (*device, error) {
 	ft, err := ftdiOpen(vid, pid)
 	if err != nil {
-		return nil, xerrors.Errorf("could not open FTDI device (vid=0x%x, pid=0x%x): %w", vid, pid, err)
+		return nil, fmt.Errorf("could not open FTDI device (vid=0x%x, pid=0x%x): %w", vid, pid, err)
 	}
 
 	dev := &device{vid: vid, pid: pid, ft: ft}
 	err = dev.init()
 	if err != nil {
 		ft.Close()
-		return nil, xerrors.Errorf("could not initialize FTDI device (vid=0x%x, pid=0x%x): %w", vid, pid, err)
+		return nil, fmt.Errorf("could not initialize FTDI device (vid=0x%x, pid=0x%x): %w", vid, pid, err)
 	}
 
 	return dev, nil
@@ -63,44 +63,44 @@ func (dev *device) init() error {
 
 	err = dev.ft.Reset()
 	if err != nil {
-		return xerrors.Errorf("could not reset USB: %w", err)
+		return fmt.Errorf("could not reset USB: %w", err)
 	}
 
 	err = dev.ft.SetBitmode(0, ftdi.ModeBitbang)
 	if err != nil {
-		return xerrors.Errorf("could not disable bitbang: %w", err)
+		return fmt.Errorf("could not disable bitbang: %w", err)
 	}
 
 	err = dev.ft.SetFlowControl(ftdi.FlowCtrlDisable)
 	if err != nil {
-		return xerrors.Errorf("could not disable flow control: %w", err)
+		return fmt.Errorf("could not disable flow control: %w", err)
 	}
 
 	err = dev.ft.SetLatencyTimer(2)
 	if err != nil {
-		return xerrors.Errorf("could not set latency timer to 2: %w", err)
+		return fmt.Errorf("could not set latency timer to 2: %w", err)
 	}
 
 	err = dev.ft.SetWriteChunkSize(0xffff)
 	if err != nil {
-		return xerrors.Errorf("could not set write chunk-size to 0xffff: %w", err)
+		return fmt.Errorf("could not set write chunk-size to 0xffff: %w", err)
 	}
 
 	err = dev.ft.SetReadChunkSize(0xffff)
 	if err != nil {
-		return xerrors.Errorf("could not set read chunk-size to 0xffff: %w", err)
+		return fmt.Errorf("could not set read chunk-size to 0xffff: %w", err)
 	}
 
 	if dev.pid == 0x6014 {
 		err = dev.ft.SetBitmode(0, ftdi.ModeReset)
 		if err != nil {
-			return xerrors.Errorf("could not reset bit mode: %w", err)
+			return fmt.Errorf("could not reset bit mode: %w", err)
 		}
 	}
 
 	err = dev.ft.PurgeBuffers()
 	if err != nil {
-		return xerrors.Errorf("could not purge USB buffers: %w", err)
+		return fmt.Errorf("could not purge USB buffers: %w", err)
 	}
 
 	return err
@@ -117,14 +117,14 @@ func (dev *device) usbRegRead(addr uint32) (uint32, error) {
 	n, err := dev.ft.Write(p[:2])
 	switch {
 	case err != nil:
-		return 0, xerrors.Errorf("could not write USB addr 0x%x: %w", addr, err)
+		return 0, fmt.Errorf("could not write USB addr 0x%x: %w", addr, err)
 	case n != len(p[:2]):
-		return 0, xerrors.Errorf("could not write USB addr 0x%x: %w", addr, io.ErrShortWrite)
+		return 0, fmt.Errorf("could not write USB addr 0x%x: %w", addr, io.ErrShortWrite)
 	}
 
 	_, err = io.ReadFull(dev.ft, p)
 	if err != nil {
-		return 0, xerrors.Errorf("could not read register 0x%x: %w", addr, err)
+		return 0, fmt.Errorf("could not read register 0x%x: %w", addr, err)
 	}
 
 	v := binary.BigEndian.Uint32(p)
@@ -138,9 +138,9 @@ func (dev *device) usbCmdWrite(cmd uint32) error {
 	n, err := dev.ft.Write(buf)
 	switch {
 	case err != nil:
-		return xerrors.Errorf("could not write USB command 0x%x: %w", cmd, err)
+		return fmt.Errorf("could not write USB command 0x%x: %w", cmd, err)
 	case n != len(buf):
-		return xerrors.Errorf("could not write USB command 0x%x: %w", cmd, io.ErrShortWrite)
+		return fmt.Errorf("could not write USB command 0x%x: %w", cmd, io.ErrShortWrite)
 	}
 
 	return nil
@@ -159,9 +159,9 @@ func (dev *device) usbRegWrite(addr, v uint32) error {
 	n, err := dev.ft.Write(p)
 	switch {
 	case err != nil:
-		return xerrors.Errorf("could not write USB register (0x%x, 0x%x): %w", addr, v, err)
+		return fmt.Errorf("could not write USB register (0x%x, 0x%x): %w", addr, v, err)
 	case n != len(p):
-		return xerrors.Errorf("could not write USB register (0x%x, 0x%x): %w", addr, v, io.ErrShortWrite)
+		return fmt.Errorf("could not write USB register (0x%x, 0x%x): %w", addr, v, io.ErrShortWrite)
 	}
 	return nil
 }
@@ -186,19 +186,19 @@ func (dev *device) difCptReset() error {
 	const addr = 0x03
 	v, err := dev.usbRegRead(addr)
 	if err != nil {
-		return xerrors.Errorf("could not read register 0x%x", addr)
+		return fmt.Errorf("could not read register 0x%x", addr)
 	}
 
 	v |= 0x2000
 	err = dev.usbRegWrite(addr, v)
 	if err != nil {
-		return xerrors.Errorf("could not write to register 0x%x", addr)
+		return fmt.Errorf("could not write to register 0x%x", addr)
 	}
 
 	v &= 0xffffdfff
 	err = dev.usbRegWrite(addr, v)
 	if err != nil {
-		return xerrors.Errorf("could not write to register 0x%x", addr)
+		return fmt.Errorf("could not write to register 0x%x", addr)
 	}
 
 	return nil

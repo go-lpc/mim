@@ -6,10 +6,10 @@ package dif
 
 import (
 	"encoding/binary"
+	"fmt"
 	"io"
 
 	"github.com/go-lpc/mim/internal/crc16"
-	"golang.org/x/xerrors"
 )
 
 // Encoder writes DIF data to an output stream.
@@ -50,7 +50,7 @@ func (enc *Encoder) Encode(dif *DIF) error {
 
 	enc.writeU8(gbHeader)
 	if enc.err != nil {
-		return xerrors.Errorf("dif: could not write global header marker: %w", enc.err)
+		return fmt.Errorf("dif: could not write global header marker: %w", enc.err)
 	}
 
 	enc.writeU8(dif.Header.ID)

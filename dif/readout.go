@@ -11,7 +11,6 @@ import (
 
 	"github.com/go-daq/tdaq/log"
 	"github.com/go-lpc/mim/internal/crc16"
-	"golang.org/x/xerrors"
 )
 
 type asicKind uint32
@@ -45,7 +44,7 @@ type Readout struct {
 func NewReadout(name string, prodID uint32, msg log.MsgStream) (*Readout, error) {
 	dev, err := newDevice(0x0403, uint16(prodID))
 	if err != nil {
-		return nil, xerrors.Errorf("could not find DIF driver (%s, 0x%x): %w", name, prodID, err)
+		return nil, fmt.Errorf("could not find DIF driver (%s, 0x%x): %w", name, prodID, err)
 	}
 
 	rdo := &Readout{
@@ -64,7 +63,7 @@ func NewReadout(name string, prodID uint32, msg log.MsgStream) (*Readout, error)
 	_, err = fmt.Sscanf(name, "FT101%03d", &rdo.difID)
 	if err != nil {
 		_ = dev.close()
-		return nil, xerrors.Errorf("could not find DIF-id from %q: %w", name, err)
+		return nil, fmt.Errorf("could not find DIF-id from %q: %w", name, err)
 	}
 
 	return rdo, nil
@@ -73,7 +72,7 @@ func NewReadout(name string, prodID uint32, msg log.MsgStream) (*Readout, error)
 func (rdo *Readout) close() error {
 	err := rdo.dev.close()
 	if err != nil {
-		return xerrors.Errorf("could not close DIF driver: %w", err)
+		return fmt.Errorf("could not close DIF driver: %w", err)
 	}
 	return nil
 }
@@ -87,17 +86,17 @@ func (rdo *Readout) stop() error {
 
 	err = rdo.dev.hardrocFlushDigitalFIFO()
 	if err != nil {
-		return xerrors.Errorf("could not flush digital FIFO: %w", err)
+		return fmt.Errorf("could not flush digital FIFO: %w", err)
 	}
 
 	err = rdo.dev.hardrocStopDigitalAcquisitionCommand()
 	if err != nil {
-		return xerrors.Errorf("could not stop digital acquisition: %w", err)
+		return fmt.Errorf("could not stop digital acquisition: %w", err)
 	}
 
 	err = rdo.dev.hardrocFlushDigitalFIFO()
 	if err != nil {
-		return xerrors.Errorf("could not flush digital FIFO: %w", err)
+		return fmt.Errorf("could not flush digital FIFO: %w", err)
 	}
 
 	return nil
@@ -107,38 +106,38 @@ func (rdo *Readout) configureRegisters() error {
 	var err error
 	err = rdo.dev.setDIFID(rdo.difID)
 	if err != nil {
-		return xerrors.Errorf("could not set DIF ID to 0x%x: %w", rdo.difID, err)
+		return fmt.Errorf("could not set DIF ID to 0x%x: %w", rdo.difID, err)
 	}
 
 	err = rdo.doRefreshNumASICs()
 	if err != nil {
-		return xerrors.Errorf("could not refresh #ASICs: %w", err)
+		return fmt.Errorf("could not refresh #ASICs: %w", err)
 	}
 
 	err = rdo.dev.setEventsBetweenTemperatureReadout(5)
 	if err != nil {
-		return xerrors.Errorf("could not set #events Temp readout: %w", err)
+		return fmt.Errorf("could not set #events Temp readout: %w", err)
 	}
 
 	err = rdo.dev.setAnalogConfigureRegister(0xc0054000)
 	if err != nil {
-		return xerrors.Errorf("could not configure analog register: %w", err)
+		return fmt.Errorf("could not configure analog register: %w", err)
 	}
 
 	err = rdo.dev.hardrocFlushDigitalFIFO()
 	if err != nil {
-		return xerrors.Errorf("could not flush digital FIFO: %w", err)
+		return fmt.Errorf("could not flush digital FIFO: %w", err)
 	}
 
 	fw, err := rdo.dev.usbFwVersion()
 	if err != nil {
-		return xerrors.Errorf("could not get firmware version: %w", err)
+		return fmt.Errorf("could not get firmware version: %w", err)
 	}
 	rdo.msg.Infof("dif %s fw: 0x%x", rdo.name, fw)
 
 	err = rdo.dev.difCptReset()
 	if err != nil {
-		return xerrors.Errorf("could not reset DIF cpt: %w", err)
+		return fmt.Errorf("could not reset DIF cpt: %w", err)
 	}
 
 	err = rdo.dev.setChipTypeRegister(map[asicKind]uint32{
@@ -146,43 +145,43 @@ func (rdo *Readout) configureRegisters() error {
 		microrocASIC: 0x1000,
 	}[rdo.asic])
 	if err != nil {
-		return xerrors.Errorf("could not set chip type: %w", err)
+		return fmt.Errorf("could not set chip type: %w", err)
 	}
 
 	err = rdo.dev.setControlRegister(rdo.ctlreg)
 	if err != nil {
-		return xerrors.Errorf("could not set control register: %w", err)
+		return fmt.Errorf("could not set control register: %w", err)
 	}
 
 	ctlreg, err := rdo.dev.getControlRegister()
 	if err != nil {
-		return xerrors.Errorf("could not get control register: %w", err)
+		return fmt.Errorf("could not get control register: %w", err)
 	}
 	rdo.msg.Infof("ctl reg: 0x%x", ctlreg)
 
 	err = rdo.dev.setPwr2PwrARegister(rdo.reg.p2pa)
 	if err != nil {
-		return xerrors.Errorf("could not set pwr to A register: %w", err)
+		return fmt.Errorf("could not set pwr to A register: %w", err)
 	}
 
 	err = rdo.dev.setPwrA2PwrDRegister(rdo.reg.pa2pd)
 	if err != nil {
-		return xerrors.Errorf("could not set A to D register: %w", err)
+		return fmt.Errorf("could not set A to D register: %w", err)
 	}
 
 	err = rdo.dev.setPwrD2DAQRegister(rdo.reg.pd2daq)
 	if err != nil {
-		return xerrors.Errorf("could not set D to DAQ register: %w", err)
+		return fmt.Errorf("could not set D to DAQ register: %w", err)
 	}
 
 	err = rdo.dev.setDAQ2PwrDRegister(rdo.reg.daq2pd)
 	if err != nil {
-		return xerrors.Errorf("could not set DAQ to D register: %w", err)
+		return fmt.Errorf("could not set DAQ to D register: %w", err)
 	}
 
 	err = rdo.dev.setPwrD2PwrARegister(rdo.reg.pd2pa)
 	if err != nil {
-		return xerrors.Errorf("could not set D to A register: %w", err)
+		return fmt.Errorf("could not set D to A register: %w", err)
 	}
 
 	return err
@@ -196,13 +195,13 @@ func (rdo *Readout) configureChips(scFrame [][]byte) (uint32, error) {
 	case microrocASIC:
 		frame = make([]byte, microrocSLCFrameSize)
 	default:
-		return 0, xerrors.Errorf("unknown ASIC kind %v", rdo.asic)
+		return 0, fmt.Errorf("unknown ASIC kind %v", rdo.asic)
 	}
 
 	crc := crc16.New(nil)
 	err := rdo.dev.hardrocCmdSLCWrite()
 	if err != nil {
-		return 0, xerrors.Errorf("%s could not send start SLC command to DIF: %w",
+		return 0, fmt.Errorf("%s could not send start SLC command to DIF: %w",
 			rdo.name, err,
 		)
 	}
@@ -211,12 +210,12 @@ func (rdo *Readout) configureChips(scFrame [][]byte) (uint32, error) {
 		copy(frame, scFrame[i-1])
 		_, err = crc.Write(frame)
 		if err != nil {
-			return 0, xerrors.Errorf("%s could not update CRC-16: %w", rdo.name, err)
+			return 0, fmt.Errorf("%s could not update CRC-16: %w", rdo.name, err)
 		}
 
 		err = rdo.dev.cmdSLCWriteSingleSLCFrame(frame)
 		if err != nil {
-			return 0, xerrors.Errorf("%s could not send SLC frame to DIF: %w",
+			return 0, fmt.Errorf("%s could not send SLC frame to DIF: %w",
 				rdo.name, err,
 			)
 		}
@@ -225,7 +224,7 @@ func (rdo *Readout) configureChips(scFrame [][]byte) (uint32, error) {
 	crc16 := crc.Sum16()
 	err = rdo.dev.hardrocCmdSLCWriteCRC(crc16)
 	if err != nil {
-		return 0, xerrors.Errorf("%s could not send CRC 0x%x to SLC: %w",
+		return 0, fmt.Errorf("%s could not send CRC 0x%x to SLC: %w",
 			rdo.name, crc16, err,
 		)
 	}
@@ -234,7 +233,7 @@ func (rdo *Readout) configureChips(scFrame [][]byte) (uint32, error) {
 
 	st, err := rdo.doReadSLCStatus()
 	if err != nil {
-		return 0, xerrors.Errorf("%s could not read SLC status: %w",
+		return 0, fmt.Errorf("%s could not read SLC status: %w",
 			rdo.name, err,
 		)
 	}
@@ -251,7 +250,7 @@ func (rdo *Readout) Readout(p []byte) (int, error) {
 	)
 	err := dec.Decode(&dif)
 	if err != nil {
-		return w.c, xerrors.Errorf("%s could not decode DIF data: %w",
+		return w.c, fmt.Errorf("%s could not decode DIF data: %w",
 			rdo.name, err,
 		)
 	}
@@ -281,7 +280,7 @@ func (rdo *Readout) doRefreshNumASICs() error {
 
 	err := rdo.dev.usbRegWrite(0x05, v)
 	if err != nil {
-		return xerrors.Errorf("could not refresh num-asics: %w", err)
+		return fmt.Errorf("could not refresh num-asics: %w", err)
 	}
 
 	return nil
@@ -290,7 +289,7 @@ func (rdo *Readout) doRefreshNumASICs() error {
 func (rdo *Readout) doReadSLCStatus() (uint32, error) {
 	st, err := rdo.dev.hardrocSLCStatusRead()
 	if err != nil {
-		return 0, xerrors.Errorf("could not read SLC status: %w", err)
+		return 0, fmt.Errorf("could not read SLC status: %w", err)
 	}
 	rdo.curSC = st
 	return st, nil

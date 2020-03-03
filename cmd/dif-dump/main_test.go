@@ -5,6 +5,7 @@
 package main
 
 import (
+	"fmt"
 	"io"
 	"io/ioutil"
 	"os"
@@ -13,7 +14,6 @@ import (
 	"testing"
 
 	"github.com/go-lpc/mim/dif"
-	"golang.org/x/xerrors"
 )
 
 func TestDump(t *testing.T) {
@@ -71,7 +71,7 @@ Frames:               2
 			name: "invalid-dif",
 			data: dif.DIF{},
 			want: string([]byte{0xb0, 0x42}),
-			err:  xerrors.Errorf("could not decode DIF: dif: could not read DIF header: %w", io.ErrUnexpectedEOF),
+			err:  fmt.Errorf("could not decode DIF: dif: could not read DIF header: %w", io.ErrUnexpectedEOF),
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {

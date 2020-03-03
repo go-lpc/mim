@@ -6,10 +6,11 @@ package dif
 
 import (
 	"encoding/binary"
+	"errors"
+	"fmt"
 	"io"
 
 	"github.com/go-lpc/mim/internal/crc16"
-	"golang.org/x/xerrors"
 )
 
 // Decoder reads and decodes DIF data from an input stream.
@@ -49,12 +50,12 @@ func (dec *Decoder) Decode(dif *DIF) error {
 
 	v := dec.readU8()
 	if dec.err != nil {
-		return xerrors.Errorf("dif: could not read global header marker: %w", dec.err)
+		return fmt.Errorf("dif: could not read global header marker: %w", dec.err)
 	}
 	switch v {
 	case gbHeader, gbHeaderB: // global header. ok
 	default:
-		return xerrors.Errorf("dif: could not read global header marker (got=0x%x)", v)
+		return fmt.Errorf("dif: could not read global header marker (got=0x%x)", v)
 	}
 
 	dec.crcU8(v)
@@ -69,13 +70,13 @@ func (dec *Decoder) Decode(dif *DIF) error {
 
 	dec.read(hdr)
 	if dec.err != nil {
-		return xerrors.Errorf("dif: could not read DIF header: %w", dec.err)
+		return fmt.Errorf("dif: could not read DIF header: %w", dec.err)
 	}
 	dec.crcw(hdr)
 
 	difID := hdr[0]
 	if difID != dec.dif {
-		return xerrors.Errorf("dif: invalid DIF ID (got=0x%x, want=0x%x)", difID, dec.dif)
+		return fmt.Errorf("dif: invalid DIF ID (got=0x%x, want=0x%x)", difID, dec.dif)
 	}
 
 	dif.Header.ID = hdr[0]
@@ -98,7 +99,7 @@ loop:
 	for {
 		v := dec.readU8()
 		if dec.err != nil {
-			return xerrors.Errorf(
+			return fmt.Errorf(
 				"dif: DIF 0x%x could not read frame header/global trailer: %w",
 				dec.dif, dec.err,
 			)
@@ -107,21 +108,21 @@ loop:
 
 		switch v {
 		default:
-			return xerrors.Errorf("dif: DIF 0x%x invalid frame/global marker (got=0x%x)", dec.dif, v)
+			return fmt.Errorf("dif: DIF 0x%x invalid frame/global marker (got=0x%x)", dec.dif, v)
 
 		case anHeader:
 			// analog frame header. not supported.
-			return xerrors.Errorf("dif: DIF 0x%x contains an analog frame", dec.dif)
+			return fmt.Errorf("dif: DIF 0x%x contains an analog frame", dec.dif)
 
 		case frHeader:
 		frameLoop:
 			for {
 				v := dec.readU8()
 				if dec.err != nil {
-					if xerrors.Is(dec.err, io.EOF) {
+					if errors.Is(dec.err, io.EOF) {
 						dec.err = io.ErrUnexpectedEOF
 					}
-					return xerrors.Errorf(
+					return fmt.Errorf(
 						"dif: DIF 0x%x could not read frame trailer/hardroc header: %w",
 						dec.dif, dec.err,
 					)
@@ -132,7 +133,7 @@ loop:
 					dec.crcU8(v)
 					dec.read(hrData)
 					if dec.err != nil {
-						return xerrors.Errorf(
+						return fmt.Errorf(
 							"dif: DIF 0x%x could not read hardroc frame: %w",
 							dec.dif, dec.err,
 						)
@@ -146,7 +147,7 @@ loop:
 					dif.Frames = append(dif.Frames, frame)
 
 				case incFrame:
-					return xerrors.Errorf("dif: DIF 0x%x received an incomplete frame", dec.dif)
+					return fmt.Errorf("dif: DIF 0x%x received an incomplete frame", dec.dif)
 
 				case frTrailer:
 					dec.crcU8(v)
@@ -160,14 +161,14 @@ loop:
 				recvCRC = dec.readU16()
 			)
 			if dec.err != nil {
-				return xerrors.Errorf(
+				return fmt.Errorf(
 					"dif: DIF 0x%x could not receive CRC-16: %w",
 					dec.dif, dec.err,
 				)
 			}
 
 			if compCRC != recvCRC {
-				return xerrors.Errorf(
+				return fmt.Errorf(
 					"dif: DIF 0x%x inconsistent CRC: recv=0x%04x comp=0x%04x",
 					dec.dif, recvCRC, compCRC,
 				)

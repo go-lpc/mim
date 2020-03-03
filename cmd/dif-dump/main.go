@@ -23,6 +23,7 @@
 package main
 
 import (
+	"errors"
 	"flag"
 	"fmt"
 	"io"
@@ -30,7 +31,6 @@ import (
 	"os"
 
 	"github.com/go-lpc/mim/dif"
-	"golang.org/x/xerrors"
 )
 
 func main() {
@@ -79,7 +79,7 @@ Example:
 func process(w io.Writer, fname string) error {
 	f, err := os.Open(fname)
 	if err != nil {
-		return xerrors.Errorf("could not open %q: %w", fname, err)
+		return fmt.Errorf("could not open %q: %w", fname, err)
 	}
 	defer f.Close()
 
@@ -89,10 +89,10 @@ loop:
 		var d dif.DIF
 		err := dec.Decode(&d)
 		if err != nil {
-			if xerrors.Is(err, io.EOF) {
+			if errors.Is(err, io.EOF) {
 				break loop
 			}
-			return xerrors.Errorf("could not decode DIF: %w", err)
+			return fmt.Errorf("could not decode DIF: %w", err)
 		}
 		fmt.Fprintf(w, "=== DIF-ID 0x%x ===\n", d.Header.ID)
 		fmt.Fprintf(w, "DIF trigger: % 10d\n", d.Header.DTC)
