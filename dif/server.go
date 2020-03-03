@@ -11,7 +11,6 @@ import (
 
 	"github.com/go-daq/tdaq"
 	"github.com/ziutek/ftdi"
-	"golang.org/x/xerrors"
 )
 
 type DeviceInfo struct {
@@ -28,15 +27,23 @@ type Server struct {
 	difs []uint32
 	devs map[uint32]DeviceInfo
 	rdos map[uint32]*Readout
+
+	calib struct {
+		gain       uint32
+		thresholds [3]uint32
+	}
+
+	db map[uint32]*DbInfo
 }
 
 func (srv *Server) scanDevices(ctx tdaq.Context) error {
 	srv.difs = srv.difs[:0]
 	srv.devs = make(map[uint32]DeviceInfo)
+	srv.db = make(map[uint32]*DbInfo)
 
 	devs, err := ftdiListDevices(0x0403)
 	if err != nil {
-		return xerrors.Errorf("could not build list of connected FTDI devices: %w", err)
+		return fmt.Errorf("could not build list of connected FTDI devices: %w", err)
 	}
 
 	for _, dev := range devs {
@@ -55,13 +62,13 @@ func (srv *Server) scanDevices(ctx tdaq.Context) error {
 func (srv *Server) initialize(ctx tdaq.Context, id uint32) error {
 	if _, dup := srv.rdos[id]; dup {
 		ctx.Msg.Errorf("DIF 0x%x already registered", id)
-		return xerrors.Errorf("DIF 0x%x already registered", id)
+		return fmt.Errorf("DIF 0x%x already registered", id)
 	}
 
 	dev, ok := srv.devs[id]
 	if !ok {
 		ctx.Msg.Errorf("DIF 0x%x not found in device map", id)
-		return xerrors.Errorf("DIF 0x%x not found in device map", id)
+		return fmt.Errorf("DIF 0x%x not found in device map", id)
 	}
 
 	rdo, err := NewReadout(dev.Name, dev.ProdID, ctx.Msg)
@@ -69,13 +76,50 @@ func (srv *Server) initialize(ctx tdaq.Context, id uint32) error {
 		ctx.Msg.Errorf("could not create readout for DIF 0x%x (name=%q): %w",
 			id, dev.Name, err,
 		)
-		return xerrors.Errorf("could not create readout for DIF 0x%x (name=%q): %w",
+		return fmt.Errorf("could not create readout for DIF 0x%x (name=%q): %w",
+			id, dev.Name, err,
+		)
+	}
+	defer func() {
+		if err != nil {
+			_ = rdo.close()
+		}
+	}()
+
+	err = rdo.checkRW(0x1234, 100)
+	if err != nil {
+		ctx.Msg.Errorf("could not check r/w readout for DIF 0x%x (name=%q): %w",
+			id, dev.Name, err,
+		)
+		return fmt.Errorf("could not check r/w readout for DIF 0x%x (name=%q): %w",
 			id, dev.Name, err,
 		)
 	}
 
 	srv.rdos[id] = rdo
+	ctx.Msg.Infof("readout for DIF 0x%x: OK", id)
 
+	return nil
+}
+
+func (srv *Server) preConfigure(ctx tdaq.Context, ctlreg uint32) error {
+	for _, id := range srv.difs {
+		rdo, ok := srv.rdos[id]
+		if !ok {
+			return fmt.Errorf("could not find readout for DIF 0x%x", id)
+		}
+		rdo.setPowerManagment(0x8c52, 0x3e6, 0xd640, 0x4e, 0x4e)
+		err := rdo.dev.setControlRegister(ctlreg)
+		if err != nil {
+			return fmt.Errorf("could not set control register for readout 0x%x: %w", id, err)
+		}
+		err = rdo.configureRegisters()
+		if err != nil {
+			return fmt.Errorf("could not configure registers for readout 0x%x: %w", id, err)
+		}
+
+		// configure chips (from db)
+	}
 	return nil
 }
 
@@ -84,7 +128,7 @@ func (srv *Server) OnConfig(ctx tdaq.Context, resp *tdaq.Frame, req tdaq.Frame) 
 	err := srv.scanDevices(ctx)
 	if err != nil {
 		ctx.Msg.Errorf("could not scan devices: %+v", err)
-		return xerrors.Errorf("could not scan devices: %w", err)
+		return fmt.Errorf("could not scan devices: %w", err)
 	}
 
 	return nil
@@ -97,7 +141,7 @@ func (srv *Server) OnInit(ctx tdaq.Context, resp *tdaq.Frame, req tdaq.Frame) er
 		err := srv.initialize(ctx, dev.ID)
 		if err != nil {
 			ctx.Msg.Errorf("could not initialize DIF 0x%x: %+v", dev.ID, err)
-			return xerrors.Errorf("could not initialize DIF 0x%x: %w", dev.ID, err)
+			return fmt.Errorf("could not initialize DIF 0x%x: %w", dev.ID, err)
 		}
 	}
 	return nil

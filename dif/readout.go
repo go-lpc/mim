@@ -295,6 +295,38 @@ func (rdo *Readout) doReadSLCStatus() (uint32, error) {
 	return st, nil
 }
 
+func (rdo *Readout) checkRW(start, count uint32) error {
+	for ireg := start; ireg < start+count; ireg++ {
+		err := rdo.dev.usbRegWrite(2, ireg)
+		if err != nil {
+			return fmt.Errorf("could not write to 0x%x: %w", ireg, err)
+		}
+		if ireg != start+count-1 {
+			continue
+		}
+
+		regctl, err := rdo.dev.usbRegRead(2)
+		if err != nil {
+			return fmt.Errorf("could not read register from FT245: %w", err)
+		}
+		if regctl != ireg {
+			return fmt.Errorf("invalid register value from FT245: got=0x%x, want=0x%x",
+				regctl, ireg,
+			)
+		}
+	}
+
+	return nil
+}
+
+func (rdo *Readout) setPowerManagment(p2pa, pa2pd, pd2daq, daq2pd, pd2pa uint32) {
+	rdo.reg.p2pa = p2pa
+	rdo.reg.pa2pd = pa2pd
+	rdo.reg.pd2daq = pd2daq
+	rdo.reg.daq2pd = daq2pd
+	rdo.reg.pd2pa = pd2pa
+}
+
 type bwriter struct {
 	p []byte
 	c int

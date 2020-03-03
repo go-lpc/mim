@@ -37,3 +37,9 @@ type SCHeader struct {
 	NumHRs    uint8 // number of Hardrocs
 	HRs       [][72]uint8
 }
+
+type DbInfo struct {
+	ID       uint32
+	NumASICs uint32
+	Slow     [MaxNumASICs][hardrocV2SLCFrameSize]byte
+}
