@@ -1,0 +1,14 @@
+[Unit]
+Description=EDA file service
+Requires=network-online.target
+
+[Service]
+User=eda
+Group=eda
+WorkingDirectory=/srv
+ExecStart=/srv/bin/eda-srv -addr=:8080 -dir=/data -host=example.com
+Restart=always
+
+[Install]
+WantedBy=multi-user.target
+
