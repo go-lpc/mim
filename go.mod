@@ -9,3 +9,5 @@ require (
 	golang.org/x/net v0.0.0-20200226121028-0de0cce0169b // indirect
 	golang.org/x/sys v0.0.0-20200223170610-d5e6a3e2c0ae // indirect
 )
+
+replace github.com/ziutek/ftdi => github.com/go-daq/ftdi v0.0.1

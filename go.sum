@@ -7,6 +7,8 @@ github.com/ajstarks/svgo v0.0.0-20180226025133-644b8db467af/go.mod h1:K08gAheRH3
 github.com/davecgh/go-spew v1.1.1/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
 github.com/fogleman/gg v1.2.1-0.20190220221249-0403632d5b90/go.mod h1:R/bRT+9gY/C5z7JzPU0zXsXHKM4/ayA+zqcVNZzPa1k=
 github.com/gdamore/optopia v0.2.0/go.mod h1:YKYEwo5C1Pa617H7NlPcmQXl+vG6YnSSNB44n8dNL0Q=
+github.com/go-daq/ftdi v0.0.1 h1:eBq+0+66afXGcQVFcVYcxscPVz/Amyh3G/IVd+K1qsY=
+github.com/go-daq/ftdi v0.0.1/go.mod h1:fUzQhjslJJSlwoMW5Cd+0RUc8KuMDfsuZB+wfJAz1eg=
 github.com/go-daq/tdaq v0.14.0 h1:A5r1zM+PuUeTKn/Ohv+OZ5q5eyt+pDj2VRHtRqXrd0c=
 github.com/go-daq/tdaq v0.14.0/go.mod h1:5WUz6fhpvnfipYvXfvNyN3kHZTmkyG50p2B5CdxPtRw=
 github.com/go-gl/glfw/v3.3/glfw v0.0.0-20191125211704-12ad95a8df72/go.mod h1:tQ2UAYgL5IevRw8kRxooKSPJfGvJ9fJQFa0TUsXzTg8=
@@ -28,6 +30,7 @@ github.com/stretchr/objx v0.1.1/go.mod h1:HFkY916IF+rwdDfMAkV7OtwuqBVzrE8GR6GFx+
 github.com/stretchr/testify v1.2.2/go.mod h1:a8OnRcib4nhh0OaRAV+Yts87kKdq0PP7pXfy6kDkUVs=
 github.com/ziutek/ftdi v0.0.0-20181130113013-aef9e445a2fa h1:8J6YeSHVtoJG5sodX1Y6qPM3eaLmxC0noolyHwWdbsM=
 github.com/ziutek/ftdi v0.0.0-20181130113013-aef9e445a2fa/go.mod h1:N08Z75zCaXPhywWVtQxjPLGCh0HtZ0pUIEeV/UlHmhI=
+github.com/ziutek/lcd v0.0.0-20141212131202-924f223d0903/go.mod h1:ZBCPhfHIcCtzsrXIcyEiSPDKHrjT9fXtJNKj2t1HCKw=
 go.nanomsg.org/mangos/v3 v3.0.0 h1:50i1v/XDhTcYW2CnJYxjpuHKf041obWL0Ccezz6SsJs=
 go.nanomsg.org/mangos/v3 v3.0.0/go.mod h1:+o2RKKCIEB6Dw/4Frf2biiEuqcRDKcEUSrC0r9OWDE0=
 golang.org/x/crypto v0.0.0-20190308221718-c2843e01d9a2/go.mod h1:djNgcEr1/C05ACkg1iLfiJU5Ep61QUkGW8qpdssI0+w=
