@@ -29,10 +29,10 @@ func main() {
 
 	flag.Parse()
 
-	run(*odir, *host, *addr)
+	runFileSrv(*odir, *host, *addr)
 }
 
-func run(odir, host, addr string) {
+func runFileSrv(odir, host, addr string) {
 	srv, err := net.Listen("tcp", addr)
 	if err != nil {
 		log.Fatalf("could not listen on %q: %+v", addr, err)

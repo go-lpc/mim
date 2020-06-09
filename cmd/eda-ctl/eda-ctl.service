@@ -1,0 +1,14 @@
+[Unit]
+Description=EDA control server service
+Requires=network-online.target
+
+[Service]
+User=eda
+Group=eda
+WorkingDirectory=/srv
+ExecStart=/srv/bin/eda-ctl -addr=:8080 -cmd=/bin/some-cmd
+Restart=always
+
+[Install]
+WantedBy=multi-user.target
+
