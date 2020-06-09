@@ -81,12 +81,14 @@ func serve(conn net.Conn, odir, host string) {
 		err = fetch(odir, host, fname)
 		if err != nil {
 			log.Printf("could not fetch file %q from %q: %+v", fname, host, err)
+			return
 		}
 
 		log.Printf("removing file %q...", fname)
 		err = remove(host, fname)
 		if err != nil {
 			log.Printf("could not remove file %q from %q: %+v", fname, host, err)
+			return
 		}
 	}
 }
