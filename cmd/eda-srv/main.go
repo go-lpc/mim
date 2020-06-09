@@ -82,6 +82,12 @@ func serve(conn net.Conn, odir, host string) {
 		if err != nil {
 			log.Printf("could not fetch file %q from %q: %+v", fname, host, err)
 		}
+
+		log.Printf("removing file %q...", fname)
+		err = remove(host, fname)
+		if err != nil {
+			log.Printf("could not remove file %q from %q: %+v", fname, host, err)
+		}
 	}
 }
 
@@ -93,6 +99,18 @@ func fetch(odir, host, fname string) error {
 	err := cmd.Run()
 	if err != nil {
 		return fmt.Errorf("could not copy file from %q: %w", host, err)
+	}
+	return nil
+}
+
+func remove(host, fname string) error {
+	cmd := exec.Command("ssh", "-oCiphers=aes128-ctr", host, "--", "/bin/rm", fname)
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+
+	err := cmd.Run()
+	if err != nil {
+		return fmt.Errorf("could not remove file from %q: %w", host, err)
 	}
 	return nil
 }
