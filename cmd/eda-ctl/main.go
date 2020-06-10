@@ -133,12 +133,11 @@ func (srv *server) handle(conn net.Conn, name string) {
 type Request struct {
 	Name string   `json:"cmd"`
 	Args []string `json:"args"`
-	Err  string   `json:"err"`
 }
 
 type Reply struct {
 	Msg string `json:"msg"`
-	Err string `json:"err"`
+	Err string `json:"err,omitempty"`
 }
 
 func (srv *server) checkCmdStatus() error {
