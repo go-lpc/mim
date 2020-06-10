@@ -106,7 +106,7 @@ func fetch(odir, host, fname string) error {
 }
 
 func remove(host, fname string) error {
-	cmd := exec.Command("ssh", "-oCiphers=aes128-ctr", host, "--", "/bin/rm", fname)
+	cmd := exec.Command("ssh", "-oCiphers=aes128-ctr", "root@"+host, "--", "/bin/rm", fname)
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 

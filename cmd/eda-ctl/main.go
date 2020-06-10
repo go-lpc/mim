@@ -85,8 +85,8 @@ func (srv *server) handle(conn net.Conn, name string) {
 			// FIXME(sbinet): mutex?
 			srv.buf.Reset()
 			srv.cmd = exec.Command(name, req.Args...)
-			srv.cmd.Stdout = io.MultiWriter(os.Stdout, srv.buf)
-			srv.cmd.Stderr = os.Stderr
+			srv.cmd.Stdout = os.Stdout
+			srv.cmd.Stderr = io.MultiWriter(os.Stderr, srv.buf)
 			err = srv.cmd.Start()
 			if err != nil {
 				log.Printf("could not start %s %s: %+v",
