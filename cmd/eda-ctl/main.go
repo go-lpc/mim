@@ -55,8 +55,9 @@ type server struct {
 	cmd  *exec.Cmd
 	buf  *bytes.Buffer
 
-	dir  string
-	freq time.Duration
+	dir    string
+	freq   time.Duration
+	alerts map[string]int // keep track of the number of alerts per file
 }
 
 func newServer(addr, dir string, freq time.Duration) (*server, error) {
@@ -65,10 +66,11 @@ func newServer(addr, dir string, freq time.Duration) (*server, error) {
 		return nil, fmt.Errorf("could not listen on %q: %w", addr, err)
 	}
 	return &server{
-		conn: srv,
-		buf:  new(bytes.Buffer),
-		dir:  dir,
-		freq: freq,
+		conn:   srv,
+		buf:    new(bytes.Buffer),
+		dir:    dir,
+		freq:   freq,
+		alerts: make(map[string]int),
 	}, nil
 }
 
@@ -251,8 +253,13 @@ func (srv *server) alert(fname string, size int64) {
 	log.Printf("file %q didn't change in the last %v (size=%d bytes)",
 		fname, srv.freq, size,
 	)
-	srv.alertMail(fname, size)
-	//srv.alertSMS(fname, size)
+	srv.alerts[fname]++
+
+	const maxAlerts = 5
+	if srv.alerts[fname] < maxAlerts {
+		srv.alertMail(fname, size)
+		//srv.alertSMS(fname, size)
+	}
 }
 
 var (
