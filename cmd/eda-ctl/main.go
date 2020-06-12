@@ -7,6 +7,7 @@ package main // import "github.com/go-lpc/mim/cmd/eda-ctl"
 
 import (
 	"bytes"
+	"crypto/tls"
 	"encoding/json"
 	"flag"
 	"fmt"
@@ -274,6 +275,9 @@ func (srv *server) alert(fname string, size int64) {
 	))
 
 	dial := mail.NewDialer(alertSrv, alertPort, alertUsr, alertPwd)
+	dial.TLSConfig = &tls.Config{
+		InsecureSkipVerify: true,
+	}
 	err := dial.DialAndSend(msg)
 	if err != nil {
 		log.Printf("could not send alert: %+v", err)
