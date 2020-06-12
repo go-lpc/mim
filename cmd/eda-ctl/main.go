@@ -16,8 +16,11 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
+
+	mail "gopkg.in/gomail.v2"
 )
 
 func main() {
@@ -242,8 +245,45 @@ func (srv *server) compare(ref, chk map[string]int64) {
 	}
 }
 
+var (
+	alertUsr  = os.Getenv("MAIL_USERNAME")
+	alertPwd  = os.Getenv("MAIL_PASSWORD")
+	alertSrv  = os.Getenv("MAIL_SERVER")
+	alertPort = atoi(os.Getenv("MAIL_PORT"))
+	alertTgts = strings.Split(os.Getenv("MAIL_TGTS"), ",")
+)
+
 func (srv *server) alert(fname string, size int64) {
 	log.Printf("file %q didn't change in the last %v (size=%d bytes)",
 		fname, srv.freq, size,
 	)
+
+	if alertUsr == "" || alertPwd == "" ||
+		alertSrv == "" || alertPort == 0 ||
+		alertTgts == nil || len(alertTgts) == 0 {
+		log.Printf("could not send alert: missing credentials")
+		return
+	}
+
+	msg := mail.NewMessage()
+	msg.SetHeader("From", alertUsr)
+	msg.SetHeader("Bcc", alertTgts...)
+	msg.SetHeader("Subject", fmt.Sprintf("[eda-ctl] file alert: %q", fname))
+	msg.SetBody("text/plain", fmt.Sprintf("file: %q\nsize: %d bytes\nfreq: %v",
+		fname, size, srv.freq,
+	))
+
+	dial := mail.NewDialer(alertSrv, alertPort, alertUsr, alertPwd)
+	err := dial.DialAndSend(msg)
+	if err != nil {
+		log.Printf("could not send alert: %+v", err)
+	}
+}
+
+func atoi(s string) int {
+	v, err := strconv.Atoi(s)
+	if err != nil {
+		return 0
+	}
+	return v
 }
