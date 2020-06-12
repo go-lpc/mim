@@ -126,6 +126,8 @@ func (srv *server) handle(conn net.Conn, name string) {
 
 		case "stop":
 			log.Printf("stopping command...")
+			// make sure the process is eventually reaped by PID-1
+			go func() { _ = srv.cmd.Wait() }()
 			err = srv.cmd.Process.Signal(os.Interrupt)
 			if err != nil {
 				log.Printf("could not stop %s %s: %+v",
