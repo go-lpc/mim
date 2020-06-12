@@ -15,6 +15,7 @@ import (
 	"net"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 	"time"
 )
@@ -23,6 +24,8 @@ func main() {
 	var (
 		name = flag.String("cmd", "acq_chb_client", "command to run")
 		addr = flag.String("addr", ":8866", "[ip]:port to listen on")
+		dir  = flag.String("dir", "", "directory to monitor")
+		freq = flag.Duration("freq", 30*time.Second, "probing interval")
 	)
 
 	flag.Parse()
@@ -30,11 +33,11 @@ func main() {
 	log.SetPrefix("eda-ctl: ")
 	log.SetFlags(0)
 
-	run(*name, *addr)
+	run(*name, *addr, *dir, *freq)
 }
 
-func run(name, addr string) {
-	srv, err := newServer(addr)
+func run(name, addr, dir string, freq time.Duration) {
+	srv, err := newServer(addr, dir, freq)
 	if err != nil {
 		log.Fatalf("could not create server: %+v", err)
 	}
@@ -46,14 +49,22 @@ type server struct {
 	conn net.Listener
 	cmd  *exec.Cmd
 	buf  *bytes.Buffer
+
+	dir  string
+	freq time.Duration
 }
 
-func newServer(addr string) (*server, error) {
+func newServer(addr, dir string, freq time.Duration) (*server, error) {
 	srv, err := net.Listen("tcp", addr)
 	if err != nil {
 		return nil, fmt.Errorf("could not listen on %q: %w", addr, err)
 	}
-	return &server{conn: srv, buf: new(bytes.Buffer)}, nil
+	return &server{
+		conn: srv,
+		buf:  new(bytes.Buffer),
+		dir:  dir,
+		freq: freq,
+	}, nil
 }
 
 func (srv *server) run(name string) {
@@ -70,6 +81,9 @@ func (srv *server) run(name string) {
 
 func (srv *server) handle(conn net.Conn, name string) {
 	defer conn.Close()
+	done := make(chan int)
+	defer close(done)
+
 	for {
 		var (
 			req Request
@@ -106,6 +120,9 @@ func (srv *server) handle(conn net.Conn, name string) {
 			}
 			_ = json.NewEncoder(conn).Encode(Reply{Msg: "ok"})
 			log.Printf("starting command... [done]")
+
+			run := req.Args[4]
+			go srv.monitor(run, done)
 
 		case "stop":
 			log.Printf("stopping command...")
@@ -164,4 +181,67 @@ func (srv *server) checkCmdStatus() error {
 			time.Sleep(1 * time.Second)
 		}
 	}
+}
+
+func (srv *server) monitor(run string, quit chan int) {
+	var (
+		tick  = time.NewTicker(srv.freq)
+		table = make(map[string]int64)
+	)
+
+	defer tick.Stop()
+
+	for {
+		select {
+		case <-quit:
+			return
+		case <-tick.C:
+			cur, err := srv.list(srv.dir, run)
+			if err != nil {
+				log.Printf("could not list files: %+v", err)
+				continue
+			}
+			srv.compare(table, cur)
+			table = cur
+		}
+	}
+}
+
+func (srv *server) list(dir, run string) (map[string]int64, error) {
+	table := make(map[string]int64)
+	glob := filepath.Join(dir, "eda_*"+run+"*raw")
+	files, err := filepath.Glob(glob)
+	if err != nil {
+		return nil, fmt.Errorf("could not glob %q: %w", glob, err)
+	}
+	for _, fname := range files {
+		fi, err := os.Stat(fname)
+		if err != nil {
+			return nil, fmt.Errorf("could not stat %q: %w", fname, err)
+		}
+		table[fname] = fi.Size()
+	}
+	return table, nil
+}
+
+func (srv *server) compare(ref, chk map[string]int64) {
+	for fname := range chk {
+		if _, ok := ref[fname]; !ok {
+			// file just appeared.
+			// nothing to compare against.
+			continue
+		}
+		refsz := ref[fname]
+		chksz := chk[fname]
+		if refsz == chksz {
+			// file didn't grow!
+			srv.alert(fname, refsz)
+		}
+	}
+}
+
+func (srv *server) alert(fname string, size int64) {
+	log.Printf("file %q didn't change in the last %v (size=%d bytes)",
+		fname, srv.freq, size,
+	)
 }
