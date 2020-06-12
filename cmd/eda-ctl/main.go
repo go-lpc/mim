@@ -14,6 +14,7 @@ import (
 	"io"
 	"log"
 	"net"
+	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -246,41 +247,95 @@ func (srv *server) compare(ref, chk map[string]int64) {
 	}
 }
 
-var (
-	alertUsr  = os.Getenv("MAIL_USERNAME")
-	alertPwd  = os.Getenv("MAIL_PASSWORD")
-	alertSrv  = os.Getenv("MAIL_SERVER")
-	alertPort = atoi(os.Getenv("MAIL_PORT"))
-	alertTgts = strings.Split(os.Getenv("MAIL_TGTS"), ",")
-)
-
 func (srv *server) alert(fname string, size int64) {
 	log.Printf("file %q didn't change in the last %v (size=%d bytes)",
 		fname, srv.freq, size,
 	)
+	srv.alertMail(fname, size)
+	//srv.alertSMS(fname, size)
+}
 
-	if alertUsr == "" || alertPwd == "" ||
-		alertSrv == "" || alertPort == 0 ||
-		alertTgts == nil || len(alertTgts) == 0 {
-		log.Printf("could not send alert: missing credentials")
+var (
+	alertMailUsr  = os.Getenv("MAIL_USERNAME")
+	alertMailPwd  = os.Getenv("MAIL_PASSWORD")
+	alertMailSrv  = os.Getenv("MAIL_SERVER")
+	alertMailPort = atoi(os.Getenv("MAIL_PORT"))
+	alertMailTgts = strings.Split(os.Getenv("MAIL_TGTS"), ",")
+)
+
+func (srv *server) alertMail(fname string, size int64) {
+	if alertMailUsr == "" || alertMailPwd == "" ||
+		alertMailSrv == "" || alertMailPort == 0 ||
+		alertMailTgts == nil || len(alertMailTgts) == 0 {
+		log.Printf("could not send mail alert: missing credentials")
 		return
 	}
 
 	msg := mail.NewMessage()
-	msg.SetHeader("From", alertUsr)
-	msg.SetHeader("Bcc", alertTgts...)
+	msg.SetHeader("From", alertMailUsr)
+	msg.SetHeader("Bcc", alertMailTgts...)
 	msg.SetHeader("Subject", fmt.Sprintf("[eda-ctl] file alert: %q", fname))
 	msg.SetBody("text/plain", fmt.Sprintf("file: %q\nsize: %d bytes\nfreq: %v",
 		fname, size, srv.freq,
 	))
 
-	dial := mail.NewDialer(alertSrv, alertPort, alertUsr, alertPwd)
+	dial := mail.NewDialer(alertMailSrv, alertMailPort, alertMailUsr, alertMailPwd)
 	dial.TLSConfig = &tls.Config{
 		InsecureSkipVerify: true,
 	}
 	err := dial.DialAndSend(msg)
 	if err != nil {
-		log.Printf("could not send alert: %+v", err)
+		log.Printf("could not send mail alert: %+v", err)
+	}
+}
+
+var (
+	alertSMSEndPoint = os.Getenv("SMS_ENDPOINT")
+)
+
+func (srv *server) alertSMS(fname string, size int64) {
+	if alertSMSEndPoint == "" {
+		log.Printf("could not send sms alert: no end-point")
+		return
+	}
+
+	var msg struct {
+		Action string `json:"action"`
+		Data   struct {
+			All bool   `json:"all"`
+			Msg string `json:"message"`
+		}
+	}
+	msg.Action = "send"
+	msg.Data.All = true
+	msg.Data.Msg = fmt.Sprintf("[eda-ctl]: alert file=%q size=%d freq=%v",
+		fname, size, srv.freq,
+	)
+
+	data := new(bytes.Buffer)
+	err := json.NewEncoder(data).Encode(msg)
+	if err != nil {
+		log.Printf("could not encode sms to json: %+v", err)
+		return
+	}
+	resp, err := http.Post(alertSMSEndPoint, "application/json", data)
+	if err != nil {
+		log.Printf("could not POST sms alert: %+v", err)
+		return
+	}
+	defer resp.Body.Close()
+
+	var status struct {
+		Msg string `json:"status"`
+	}
+	err = json.NewDecoder(resp.Body).Decode(&status)
+	if err != nil {
+		log.Printf("could not decode sms reply: %+v", err)
+		return
+	}
+	if status.Msg != "success" {
+		log.Printf("could not send sms: status=%q", status.Msg)
+		return
 	}
 }
 
