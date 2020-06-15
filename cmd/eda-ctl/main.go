@@ -258,7 +258,7 @@ func (srv *server) alert(fname string, size int64) {
 	const maxAlerts = 5
 	if srv.alerts[fname] < maxAlerts {
 		srv.alertMail(fname, size)
-		//srv.alertSMS(fname, size)
+		srv.alertSMS(fname, size)
 	}
 }
 
