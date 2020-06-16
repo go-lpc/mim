@@ -37,6 +37,8 @@ func main() {
 	log.SetPrefix("dif-dump: ")
 	log.SetFlags(0)
 
+	eda := flag.Bool("eda", false, "enable EDA hack")
+
 	flag.Usage = func() {
 		fmt.Printf(`dif-dump decodes and displays DIF data files.
 
@@ -69,14 +71,14 @@ Example:
 	}
 
 	for _, fname := range flag.Args() {
-		err := process(os.Stdout, fname)
+		err := process(os.Stdout, fname, *eda)
 		if err != nil {
 			log.Fatalf("could not dump file %q: %+v", fname, err)
 		}
 	}
 }
 
-func process(w io.Writer, fname string) error {
+func process(w io.Writer, fname string, eda bool) error {
 	f, err := os.Open(fname)
 	if err != nil {
 		return fmt.Errorf("could not open %q: %w", fname, err)
@@ -84,6 +86,7 @@ func process(w io.Writer, fname string) error {
 	defer f.Close()
 
 	dec := dif.NewDecoder(difIDFrom(f), f)
+	dec.IsEDA = eda
 loop:
 	for {
 		var d dif.DIF

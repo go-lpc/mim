@@ -23,6 +23,11 @@ type Decoder struct {
 	buf []byte
 	err error
 	crc crc16.Hash16
+
+	// IsEDA indicates whether input is from EDA DAQ.
+	// If true, this enables a hack (ignoring trailing CRC16 checksum)
+	// needed to not fail when decoding EDA data coming from the DAQ.
+	IsEDA bool
 }
 
 // NewDecoder returns a new Decoder that reads from r.
@@ -168,10 +173,12 @@ loop:
 			}
 
 			if compCRC != recvCRC {
-				return fmt.Errorf(
-					"dif: DIF 0x%x inconsistent CRC: recv=0x%04x comp=0x%04x",
-					dec.dif, recvCRC, compCRC,
-				)
+				if !(dec.IsEDA && recvCRC == 0xc0c0) /*hack for EDA*/ {
+					return fmt.Errorf(
+						"dif: DIF 0x%x inconsistent CRC: recv=0x%04x comp=0x%04x",
+						dec.dif, recvCRC, compCRC,
+					)
+				}
 			}
 			break loop
 		}

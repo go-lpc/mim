@@ -25,6 +25,7 @@ func TestDump(t *testing.T) {
 
 	for _, tc := range []struct {
 		name string
+		eda  bool
 		data dif.DIF
 		want string
 		err  error
@@ -101,7 +102,7 @@ Frames:               2
 			}
 
 			out := new(strings.Builder)
-			err = process(out, fname)
+			err = process(out, fname, tc.eda)
 			switch {
 			case err != nil && tc.err != nil:
 				if got, want := err.Error(), tc.err.Error(); got != want {
