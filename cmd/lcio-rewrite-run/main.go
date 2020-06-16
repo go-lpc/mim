@@ -23,6 +23,7 @@ func main() {
 	var (
 		runnbr = flag.Int("run", 0, "run number to use for output LCIO file")
 		oname  = flag.String("o", "out.lcio", "path to output rewritten LCIO file")
+		compr  = flag.Int("compr", flate.DefaultCompression, "compression level to use for output file")
 	)
 
 	flag.Usage = func() {
@@ -60,9 +61,16 @@ options:
 	}
 	defer w.Close()
 
-	w.SetCompressionLevel(flate.BestCompression)
+	w.SetCompressionLevel(*compr)
 
-	err = process(w, r, int32(*runnbr))
+	n, err := numEvents(flag.Arg(0))
+	if err != nil {
+		log.Fatalf("could not assess number of events: %+v", err)
+	}
+	log.Printf("input:  %s", flag.Arg(0))
+	log.Printf("events: %d", n)
+
+	err = process(w, r, int32(*runnbr), int(n/10))
 	if err != nil {
 		log.Fatalf("could not rewrite %q: %+v", flag.Arg(0), err)
 	}
@@ -73,7 +81,27 @@ options:
 	}
 }
 
-func process(w *lcio.Writer, r *lcio.Reader, run int32) error {
+func numEvents(fname string) (int64, error) {
+	r, err := lcio.Open(fname)
+	if err != nil {
+		return 0, fmt.Errorf("could not open %q: %w", fname, err)
+	}
+	defer r.Close()
+
+	var n int64
+	for r.Next() {
+		n++
+	}
+
+	err = r.Err()
+	if err != nil && err != io.EOF {
+		return 0, fmt.Errorf("could not assess number of events in %q: %w", fname, err)
+	}
+
+	return n, nil
+}
+
+func process(w *lcio.Writer, r *lcio.Reader, run int32, freq int) error {
 	var (
 		rhdr lcio.RunHeader
 		i    = 0
@@ -92,7 +120,7 @@ func process(w *lcio.Writer, r *lcio.Reader, run int32) error {
 
 		evt := r.Event()
 		evt.RunNumber = run
-		if i%10 == 0 {
+		if i%freq == 0 {
 			log.Printf("processing event %d...", evt.EventNumber)
 		}
 		err := w.WriteEvent(&evt)
