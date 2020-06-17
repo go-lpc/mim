@@ -6,23 +6,21 @@
 package main // import "github.com/go-lpc/mim/cmd/lcio2eda"
 
 import (
-	"bytes"
 	"flag"
 	"fmt"
 	"io"
 	"log"
 	"os"
-	"reflect"
-	"unsafe"
 
-	"github.com/go-lpc/mim/dif"
+	"github.com/go-lpc/mim/internal/xcnv"
 	"go-hep.org/x/hep/lcio"
 )
 
-func main() {
-	log.SetPrefix("lcio2eda: ")
-	log.SetFlags(0)
+var (
+	msg = log.New(os.Stdout, "lcio2eda: ", 0)
+)
 
+func main() {
 	var (
 		oname = flag.String("o", "out.raw", "path to output EDA raw file")
 	)
@@ -42,24 +40,17 @@ options:
 
 	if flag.NArg() != 1 {
 		flag.Usage()
-		log.Fatalf("missing input LCIO file")
+		msg.Fatalf("missing input LCIO file")
 	}
 
 	if *oname == "" {
 		flag.Usage()
-		log.Fatalf("invalid output EDA file name")
+		msg.Fatalf("invalid output EDA file name")
 	}
 
-	n, err := numEvents(flag.Arg(0))
+	err := process(*oname, flag.Arg(0))
 	if err != nil {
-		log.Fatalf("could not assess number of events: %+v", err)
-	}
-	log.Printf("input:  %s", flag.Arg(0))
-	log.Printf("events: %d", n)
-
-	err = process(*oname, flag.Arg(0), int(n/10))
-	if err != nil {
-		log.Fatalf("could not convert LCIO file: %+v", err)
+		msg.Fatalf("could not convert LCIO file: %+v", err)
 	}
 }
 
@@ -83,7 +74,18 @@ func numEvents(fname string) (int64, error) {
 	return n, nil
 }
 
-func process(oname, fname string, freq int) error {
+func process(oname, fname string) error {
+	n, err := numEvents(fname)
+	if err != nil {
+		msg.Fatalf("could not assess number of events: %+v", err)
+	}
+	msg.Printf("input:  %s", fname)
+	msg.Printf("events: %d", n)
+	freq := int(n / 10)
+	if freq == 0 {
+		freq = 1
+	}
+
 	r, err := lcio.Open(fname)
 	if err != nil {
 		return fmt.Errorf("could not open LCIO file: %w", err)
@@ -96,29 +98,9 @@ func process(oname, fname string, freq int) error {
 	}
 	defer f.Close()
 
-	var (
-		enc = dif.NewEncoder(f)
-		i   = 0
-	)
-	for r.Next() {
-		if i%freq == 0 {
-			log.Printf("processing evt %d...", i)
-		}
-		evt := r.Event()
-		raw := evt.Get("RU_XDAQ").(*lcio.GenericObject).Data[0].I32s
-		buf := bytesFrom(raw[6:])
-		dec := dif.NewDecoder(buf[1], bytes.NewReader(buf))
-
-		var d dif.DIF
-		err := dec.Decode(&d)
-		if err != nil {
-			return fmt.Errorf("could not decode EDA: %w", err)
-		}
-		err = enc.Encode(&d)
-		if err != nil {
-			return fmt.Errorf("could not re-encode EDA: %w", err)
-		}
-		i++
+	err = xcnv.LCIO2EDA(f, r, freq, msg)
+	if err != nil {
+		return fmt.Errorf("could not convert to EDA: %w", err)
 	}
 
 	err = f.Close()
@@ -126,12 +108,4 @@ func process(oname, fname string, freq int) error {
 		return fmt.Errorf("could not close output EDA file: %w", err)
 	}
 	return nil
-}
-
-func bytesFrom(raw []int32) []byte {
-	hdr := *(*reflect.SliceHeader)(unsafe.Pointer(&raw))
-	hdr.Len *= 4
-	hdr.Cap *= 4
-
-	return *(*[]byte)(unsafe.Pointer(&hdr))
 }

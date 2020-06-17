@@ -5,47 +5,19 @@
 package main
 
 import (
-	"compress/flate"
+	"bytes"
 	"io/ioutil"
 	"os"
 	"path/filepath"
 	"testing"
 
 	"github.com/go-lpc/mim/dif"
+	"github.com/go-lpc/mim/internal/xcnv"
+	"go-hep.org/x/hep/lcio"
 )
 
-func TestRunNbrFrom(t *testing.T) {
-	for _, tc := range []struct {
-		fname string
-		run   int32
-	}{
-		{
-			fname: "./eda_063.000.raw",
-			run:   63,
-		},
-		{
-			fname: "/some/dir/eda_663.000.raw",
-			run:   663,
-		},
-		{
-			fname: "../some/dir/eda_009.000.raw",
-			run:   9,
-		},
-	} {
-		t.Run(tc.fname, func(t *testing.T) {
-			got, err := runNbrFrom(tc.fname)
-			if err != nil {
-				t.Fatalf("could not infer run-nbr: %+v", err)
-			}
-			if got != tc.run {
-				t.Fatalf("invalid run: got=%d, want=%d", got, tc.run)
-			}
-		})
-	}
-}
-
-func TestEDA2LCIO(t *testing.T) {
-	tmp, err := ioutil.TempDir("", "mim-xcnv-")
+func TestLCIO2EDA(t *testing.T) {
+	tmp, err := ioutil.TempDir("", "mim-")
 	if err != nil {
 		t.Fatalf("could not create tmp dir: %+v", err)
 	}
@@ -95,8 +67,36 @@ func TestEDA2LCIO(t *testing.T) {
 		t.Fatalf("could not close EDA file: %+v", err)
 	}
 
-	err = process(fname+".lcio", flate.DefaultCompression, fname)
+	edabuf, err := ioutil.ReadFile(fname)
 	if err != nil {
-		t.Fatalf("could not convert EDA file: %+v", err)
+		t.Fatalf("could not read EDA file: %+v", err)
+	}
+
+	lw, err := lcio.Create(fname + ".lcio")
+	if err != nil {
+		t.Fatalf("could not create LCIO file: %+v", err)
+	}
+	defer lw.Close()
+
+	err = xcnv.EDA2LCIO(lw, dif.NewDecoder(refdif.Header.ID, bytes.NewReader(edabuf)), run, msg)
+	if err != nil {
+		t.Fatalf("could not convert to LCIO: %+v", err)
+	}
+	err = lw.Close()
+	if err != nil {
+		t.Fatalf("could not close LCIO file: %+v", err)
+	}
+
+	got, err := numEvents(fname + ".lcio")
+	if err != nil {
+		t.Fatalf("could not retrieve number of events: %+v", err)
+	}
+	if got, want := got, int64(1); got != want {
+		t.Fatalf("invalid number of events: got=%d, want=%d", got, want)
+	}
+
+	err = process(fname, fname+".lcio")
+	if err != nil {
+		t.Fatalf("could not process LCIO->EDA: %+v", err)
 	}
 }
