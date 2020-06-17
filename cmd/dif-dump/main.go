@@ -23,6 +23,7 @@
 package main
 
 import (
+	"bufio"
 	"errors"
 	"flag"
 	"fmt"
@@ -79,6 +80,9 @@ Example:
 }
 
 func process(w io.Writer, fname string, eda bool) error {
+	wbuf := bufio.NewWriter(w)
+	defer wbuf.Flush()
+
 	f, err := os.Open(fname)
 	if err != nil {
 		return fmt.Errorf("could not open %q: %w", fname, err)
@@ -97,16 +101,16 @@ loop:
 			}
 			return fmt.Errorf("could not decode DIF: %w", err)
 		}
-		fmt.Fprintf(w, "=== DIF-ID 0x%x ===\n", d.Header.ID)
-		fmt.Fprintf(w, "DIF trigger: % 10d\n", d.Header.DTC)
-		fmt.Fprintf(w, "ACQ trigger: % 10d\n", d.Header.ATC)
-		fmt.Fprintf(w, "Gbl trigger: % 10d\n", d.Header.GTC)
-		fmt.Fprintf(w, "Abs BCID:    % 10d\n", d.Header.AbsBCID)
-		fmt.Fprintf(w, "Time DIF:    % 10d\n", d.Header.TimeDIFTC)
-		fmt.Fprintf(w, "Frames:      % 10d\n", len(d.Frames))
+		fmt.Fprintf(wbuf, "=== DIF-ID 0x%x ===\n", d.Header.ID)
+		fmt.Fprintf(wbuf, "DIF trigger: % 10d\n", d.Header.DTC)
+		fmt.Fprintf(wbuf, "ACQ trigger: % 10d\n", d.Header.ATC)
+		fmt.Fprintf(wbuf, "Gbl trigger: % 10d\n", d.Header.GTC)
+		fmt.Fprintf(wbuf, "Abs BCID:    % 10d\n", d.Header.AbsBCID)
+		fmt.Fprintf(wbuf, "Time DIF:    % 10d\n", d.Header.TimeDIFTC)
+		fmt.Fprintf(wbuf, "Frames:      % 10d\n", len(d.Frames))
 
 		for _, frame := range d.Frames {
-			fmt.Fprintf(w, "  hroc=0x%02x BCID=% 8d %x\n",
+			fmt.Fprintf(wbuf, "  hroc=0x%02x BCID=% 8d %x\n",
 				frame.Header, frame.BCID, frame.Data,
 			)
 		}
