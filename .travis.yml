@@ -33,13 +33,6 @@ matrix:
 
 sudo: required
 
-notifications:
-  email:
-    recipients:
-      - binet@cern.ch
-    on_success: always
-    on_failure: always
-
 before_install:
  - sudo apt-get install -qq pkg-config libftdi1-dev
 
@@ -47,6 +40,3 @@ script:
  - go get -d -t -v ./...
  - go install -v $TAGS ./...
  - go run ./ci/run-tests.go $TAGS $COVERAGE
-
-after_success:
- - bash <(curl -s https://codecov.io/bash)
