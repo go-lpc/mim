@@ -311,11 +311,11 @@ func (srv *server) alertSMS(fname string, size int64) {
 		Data   struct {
 			All bool   `json:"all"`
 			Msg string `json:"message"`
-		}
+		} `json:"data"`
 	}
 	msg.Action = "send"
 	msg.Data.All = true
-	msg.Data.Msg = fmt.Sprintf("[eda-ctl]: alert file=%q size=%d freq=%v",
+	msg.Data.Msg = fmt.Sprintf("eda-ctl: alert file=%s size=%d freq=%v",
 		fname, size, srv.freq,
 	)
 
