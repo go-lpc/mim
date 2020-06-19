@@ -37,7 +37,7 @@ type Readout struct {
 		daq2pd uint32 // DAQ to power D
 		pd2pa  uint32 // power D to power A
 	}
-	temp [2]float32 // temperatures
+	// temp [2]float32 // temperatures
 }
 
 // NewReadout creates a new DIF readout.
@@ -269,7 +269,7 @@ func (rdo *Readout) doRefreshNumASICs() error {
 	)
 
 	f := func(n, l1, l2, l3, l4 uint8) uint32 {
-		return uint32(n) + uint32(l1<<8) + uint32(l2<<14) + uint32(l3<<20) + uint32(l4<<26)
+		return uint32(n) + uint32(l1)<<8 + uint32(l2)<<14 + uint32(l3)<<20 + uint32(l4)<<26
 	}
 	switch rdo.asic {
 	case microrocASIC:

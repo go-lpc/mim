@@ -77,7 +77,6 @@ func TestEDA2LCIO(t *testing.T) {
 		},
 	}
 
-	const run = 63
 	fname := filepath.Join(tmp, "eda_063.000.raw")
 	edaf, err := os.Create(fname)
 	if err != nil {

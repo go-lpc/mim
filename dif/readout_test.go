@@ -143,6 +143,7 @@ func TestReadout(t *testing.T) {
 		t.Fatalf("could not readout data: n=%d", n)
 	}
 	data = data[:n]
+	_ = data
 
 	err = rdo.stop()
 	if err != nil {
