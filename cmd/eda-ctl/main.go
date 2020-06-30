@@ -52,8 +52,8 @@ func run(name, addr, dir string, freq time.Duration) {
 
 type server struct {
 	conn net.Listener
+	stat net.Listener
 	cmd  *exec.Cmd
-	buf  *bytes.Buffer
 
 	dir    string
 	freq   time.Duration
@@ -65,9 +65,13 @@ func newServer(addr, dir string, freq time.Duration) (*server, error) {
 	if err != nil {
 		return nil, fmt.Errorf("could not listen on %q: %w", addr, err)
 	}
+	stat, err := net.Listen("tcp", ":8877")
+	if err != nil {
+		return nil, fmt.Errorf("could not listen on %q: %w", addr, err)
+	}
 	return &server{
 		conn:   srv,
-		buf:    new(bytes.Buffer),
+		stat:   stat,
 		dir:    dir,
 		freq:   freq,
 		alerts: make(map[string]int),
@@ -76,6 +80,7 @@ func newServer(addr, dir string, freq time.Duration) (*server, error) {
 
 func (srv *server) run(name string) {
 	defer srv.conn.Close()
+	defer srv.stat.Close()
 
 	for {
 		conn, err := srv.conn.Accept()
@@ -102,12 +107,12 @@ func (srv *server) handle(conn net.Conn, name string) {
 		}
 		switch req.Name {
 		case "start":
+			ready := make(chan error)
+			go srv.waitReady(ready)
+
 			log.Printf("starting command... %s %v", name, req.Args)
-			// FIXME(sbinet): mutex?
-			srv.buf.Reset()
 			srv.cmd = exec.Command(name, req.Args...)
 			srv.cmd.Stdout = os.Stdout
-			srv.cmd.Stderr = io.MultiWriter(os.Stderr, srv.buf)
 			err = srv.cmd.Start()
 			if err != nil {
 				log.Printf("could not start %s %s: %+v",
@@ -118,7 +123,7 @@ func (srv *server) handle(conn net.Conn, name string) {
 				_ = json.NewEncoder(conn).Encode(Reply{Err: err.Error()})
 				return
 			}
-			err = srv.checkCmdStatus()
+			err = <-ready
 			if err != nil {
 				_ = srv.cmd.Process.Kill()
 				log.Printf("command not in proper state: %+v", err)
@@ -166,29 +171,42 @@ type Reply struct {
 	Err string `json:"err,omitempty"`
 }
 
-func (srv *server) checkCmdStatus() error {
+func (srv *server) waitReady(ready chan error) {
+	conn, err := srv.stat.Accept()
+	if err != nil {
+		ready <- fmt.Errorf("could not accept conn from client: %w", err)
+		return
+	}
+	defer conn.Close()
+
+	want := []byte("eda-ready")
+	msg := make(chan string)
+	go func() {
+		buf := make([]byte, len(want))
+		_, err := io.ReadFull(conn, buf)
+		if err != nil {
+			ready <- fmt.Errorf("could not read from mon-conn: %w", err)
+			return
+		}
+		msg <- string(buf)
+	}()
+
 	var (
-		timeout = 10 * time.Second
+		timeout = 15 * time.Second
 		timer   = time.NewTimer(timeout)
 	)
 	defer timer.Stop()
 
-	for {
-		select {
-		case <-timer.C:
-			return fmt.Errorf(
-				"could not assess command status before timeout (%v)",
-				timeout,
-			)
-		default:
-			buf := srv.buf.Bytes()
-			buf = bytes.TrimSpace(buf)
-			buf = bytes.TrimRight(buf, "\r\n")
-			if bytes.HasSuffix(buf, []byte("waiting for reset_BCID command")) {
-				return nil
-			}
-			time.Sleep(1 * time.Second)
+	select {
+	case <-timer.C:
+		ready <- fmt.Errorf("could not read message from mon-conn before timeout (%v)", timeout)
+		return
+	case v := <-msg:
+		if v != string(want) {
+			ready <- fmt.Errorf("invalid message from mon-conn: got=%q", v)
+			return
 		}
+		ready <- nil
 	}
 }
 
