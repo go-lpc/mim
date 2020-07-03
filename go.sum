@@ -20,8 +20,8 @@ github.com/fogleman/gg v1.2.1-0.20190220221249-0403632d5b90/go.mod h1:R/bRT+9gY/
 github.com/fogleman/gg v1.3.0/go.mod h1:R/bRT+9gY/C5z7JzPU0zXsXHKM4/ayA+zqcVNZzPa1k=
 github.com/frankban/quicktest v1.5.0/go.mod h1:jaStnuzAqU1AJdCO0l53JDCJrVDKcS03DbaAcR7Ks/o=
 github.com/gdamore/optopia v0.2.0/go.mod h1:YKYEwo5C1Pa617H7NlPcmQXl+vG6YnSSNB44n8dNL0Q=
-github.com/go-daq/tdaq v0.14.0 h1:A5r1zM+PuUeTKn/Ohv+OZ5q5eyt+pDj2VRHtRqXrd0c=
-github.com/go-daq/tdaq v0.14.0/go.mod h1:5WUz6fhpvnfipYvXfvNyN3kHZTmkyG50p2B5CdxPtRw=
+github.com/go-daq/tdaq v0.14.1 h1:hJdjnUQaB723pnyGKa8YajoZDFpcPguf5M4UDMfw9+Q=
+github.com/go-daq/tdaq v0.14.1/go.mod h1:ksXm3sglkfEUt0KFxMAszsGvSynhpX/oidugEYmhE1c=
 github.com/go-gl/glfw v0.0.0-20190409004039-e6da0acd62b1/go.mod h1:vR7hzQXu2zJy9AVAgeJqvqgH9Q5CA+iKCZ2gyEVpxRU=
 github.com/go-gl/glfw/v3.3/glfw v0.0.0-20191125211704-12ad95a8df72/go.mod h1:tQ2UAYgL5IevRw8kRxooKSPJfGvJ9fJQFa0TUsXzTg8=
 github.com/go-gl/glfw/v3.3/glfw v0.0.0-20200222043503-6f7a984d4dc4/go.mod h1:tQ2UAYgL5IevRw8kRxooKSPJfGvJ9fJQFa0TUsXzTg8=
@@ -103,8 +103,8 @@ go-hep.org/x/hep v0.21.0/go.mod h1:gbp4SbxCTtqu91WY/OsD+1bK0W3gpQqEt1IVQLjiMn4=
 go-hep.org/x/hep v0.23.1/go.mod h1:+/LhRnY/keU6GBS0mbgpFvH3LNOOHQXZ5csL0pnMets=
 go-hep.org/x/hep v0.27.0 h1:/bHgpejtj6hqJ+UYAwD8jK9pJZzWpgRM3SP+QRB6wSE=
 go-hep.org/x/hep v0.27.0/go.mod h1:zS28ZIH/9eQX/yN93xqmAcxzRQQfkn/7vumDD47ZVhY=
-go.nanomsg.org/mangos/v3 v3.0.0 h1:50i1v/XDhTcYW2CnJYxjpuHKf041obWL0Ccezz6SsJs=
-go.nanomsg.org/mangos/v3 v3.0.0/go.mod h1:+o2RKKCIEB6Dw/4Frf2biiEuqcRDKcEUSrC0r9OWDE0=
+go.nanomsg.org/mangos/v3 v3.0.1 h1:xR8nca0ZeAvwsoRWjeEHuR2/B0N+Po/ZJpGNCpDz6To=
+go.nanomsg.org/mangos/v3 v3.0.1/go.mod h1:RxVwsn46YtfJ74mF8MeVo+MFjg545KCI50NuZrFXmzc=
 golang.org/x/crypto v0.0.0-20190308221718-c2843e01d9a2/go.mod h1:djNgcEr1/C05ACkg1iLfiJU5Ep61QUkGW8qpdssI0+w=
 golang.org/x/crypto v0.0.0-20190510104115-cbcb75029529/go.mod h1:yigFU9vqHzYiE8UmvKecakEJjdnWj3jj499lnFckfCI=
 golang.org/x/crypto v0.0.0-20191011191535-87dc89f01550/go.mod h1:yigFU9vqHzYiE8UmvKecakEJjdnWj3jj499lnFckfCI=
@@ -231,5 +231,4 @@ modernc.org/strutil v1.0.0/go.mod h1:lstksw84oURvj9y3tn8lGvRxyRC1S2+g5uuIzNfIOBs
 modernc.org/strutil v1.1.0/go.mod h1:lstksw84oURvj9y3tn8lGvRxyRC1S2+g5uuIzNfIOBs=
 modernc.org/xc v1.0.0/go.mod h1:mRNCo0bvLjGhHO9WsyuKVU4q0ceiDDDoEeWDJHrNx8I=
 modernc.org/zappy v1.0.0/go.mod h1:hHe+oGahLVII/aTTyWK/b53VDHMAGCBYYeZ9sn83HC4=
-nanomsg.org/go/mangos/v2 v2.0.8/go.mod h1:gngxudWUZkxqHN+8n/2y9gWZPcwmSbliFYJsYG8mbKs=
 rsc.io/pdf v0.1.1/go.mod h1:n8OzWcQ6Sp37PL01nO98y4iUCRdTGarVfzxY20ICaU4=

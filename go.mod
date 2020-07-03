@@ -3,7 +3,7 @@ module github.com/go-lpc/mim
 go 1.14
 
 require (
-	github.com/go-daq/tdaq v0.14.0
+	github.com/go-daq/tdaq v0.14.1
 	github.com/peterh/liner v1.2.0
 	github.com/ziutek/ftdi v0.0.0-20200603141500-eeb855b6c05f
 	go-hep.org/x/hep v0.27.0
