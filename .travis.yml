@@ -25,7 +25,6 @@ matrix:
    - go: 1.14.x
      env:
        - TAGS=""
-       - COVERAGE="-coverpkg=github.com/go-lpc/mim/..."
    - go: master
      env:
        - TAGS=""
