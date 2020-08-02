@@ -5,6 +5,7 @@
 package dif
 
 import (
+	"bytes"
 	"fmt"
 	"sort"
 	"strings"
@@ -102,23 +103,149 @@ func (srv *Server) initialize(ctx tdaq.Context, id uint32) error {
 	return nil
 }
 
-func (srv *Server) preConfigure(ctx tdaq.Context, ctlreg uint32) error {
-	for _, id := range srv.difs {
-		rdo, ok := srv.rdos[id]
+func (srv *Server) preConfigure(ctx tdaq.Context, id, ctlreg uint32) error {
+	rdo, ok := srv.rdos[id]
+	if !ok {
+		return fmt.Errorf("could not find readout for DIF 0x%x", id)
+	}
+	rdo.setPowerManagment(0x8c52, 0x3e6, 0xd640, 0x4e, 0x4e)
+	err := rdo.dev.setControlRegister(ctlreg)
+	if err != nil {
+		return fmt.Errorf("could not set control register for readout 0x%x: %w", id, err)
+	}
+	err = rdo.configureRegisters()
+	if err != nil {
+		return fmt.Errorf("could not configure registers for readout 0x%x: %w", id, err)
+	}
+
+	return nil
+}
+
+func (srv *Server) configureChips(dif uint32, slow [][]byte, numASICs uint32) (uint32, error) {
+	rdo, ok := srv.rdos[dif]
+	if !ok || rdo == nil {
+		return 0, fmt.Errorf("could not find readout 0x%x", dif)
+	}
+
+	if numASICs != MaxNumASICs {
+		rdo.nasics = int(numASICs)
+		err := rdo.configureRegisters()
+		if err != nil {
+			return 0, fmt.Errorf("could not configure registers with ASICs=%d for readout 0x%x: %w",
+				numASICs, dif, err,
+			)
+		}
+	}
+
+	return rdo.configureChips(slow)
+}
+
+func (srv *Server) cmdScan(ctx tdaq.Context) error {
+	return srv.scanDevices(ctx)
+}
+
+func (srv *Server) cmdInitialize(ctx tdaq.Context, req tdaq.Frame) error {
+	dec := tdaq.NewDecoder(bytes.NewReader(req.Body))
+	difid := dec.ReadU32()
+
+	err := srv.initialize(ctx, difid)
+	if err != nil {
+		return fmt.Errorf("could not intialize DIF 0x%x: %w", difid, err)
+	}
+
+	return nil
+}
+
+func (srv *Server) cmdRegisterState(ctx tdaq.Context, req tdaq.Frame) error {
+	dec := tdaq.NewDecoder(bytes.NewReader(req.Body))
+	str := dec.ReadStr()
+	if str != "" {
+		panic("TODO")
+	}
+	// TODO(sbinet)
+	return nil
+}
+
+func (srv *Server) cmdLoopConfigure(ctx tdaq.Context, req tdaq.Frame) error {
+	dec := tdaq.NewDecoder(bytes.NewReader(req.Body))
+	id := dec.ReadU32()
+	n := int(dec.ReadU32())
+
+	db, ok := srv.db[id]
+	if !ok {
+		return fmt.Errorf("could not retrieve db-info for DIF 0x%x", id)
+	}
+
+	if db.ID != id {
+		return fmt.Errorf("inconsistent db-info: id=0x%x|0x%x", db.ID, id)
+	}
+
+	for i := 0; i < n; i++ {
+		slc, err := srv.configureChips(id, db.Slow, db.NumASICs)
+		if err != nil {
+			return fmt.Errorf("could not configure chips for DIF 0x%x: %w", id, err)
+		}
+		str, ok := slcStatus(slc)
+		ctx.Msg.Infof("slow control frame 0x%x: %s", id, str)
 		if !ok {
-			return fmt.Errorf("could not find readout for DIF 0x%x", id)
+			return fmt.Errorf("could not configure DIF 0x%x SLC=0x%x [%s]",
+				id, slc, str,
+			)
 		}
-		rdo.setPowerManagment(0x8c52, 0x3e6, 0xd640, 0x4e, 0x4e)
-		err := rdo.dev.setControlRegister(ctlreg)
+	}
+
+	// TODO(sbinet)
+	return nil
+}
+
+func (srv *Server) cmdPreconfigure(ctx tdaq.Context, req tdaq.Frame) error {
+	dec := tdaq.NewDecoder(bytes.NewReader(req.Body))
+	ctlreg := dec.ReadU32()
+
+	for _, id := range srv.difs {
+		err := srv.preConfigure(ctx, id, ctlreg)
 		if err != nil {
-			return fmt.Errorf("could not set control register for readout 0x%x: %w", id, err)
-		}
-		err = rdo.configureRegisters()
-		if err != nil {
-			return fmt.Errorf("could not configure registers for readout 0x%x: %w", id, err)
+			return fmt.Errorf(
+				"could not preconfigure readout 0x%x w/ ctlreg=0x%x: %w",
+				id, ctlreg, err,
+			)
 		}
 
-		// configure chips (from db)
+		db, ok := srv.db[id]
+		if !ok {
+			return fmt.Errorf("could not retrieve db-info for DIF 0x%x", id)
+		}
+
+		slc, err := srv.configureChips(id, db.Slow, db.NumASICs)
+		if err != nil {
+			return fmt.Errorf("could not configure chips for DIF 0x%x: %w", id, err)
+		}
+		str, ok := slcStatus(slc)
+		ctx.Msg.Infof("slow control frame 0x%x: %s", id, str)
+		if !ok {
+			return fmt.Errorf("could not configure DIF 0x%x SLC=0x%x [%s]",
+				id, slc, str,
+			)
+		}
+
+	}
+
+	return nil
+}
+
+func (srv *Server) cmdConfigureChips(ctx tdaq.Context, req tdaq.Frame) error {
+	dec := tdaq.NewDecoder(bytes.NewReader(req.Body))
+	dif := dec.ReadU32()
+	nasics := dec.ReadU32()
+	scframe := make([][]byte, nasics)
+	for i := range scframe {
+		scframe[i] = make([]byte, hardrocV2SLCFrameSize)
+	}
+
+	srv.BOO
+	_, err := srv.configureChips(dif, scframe, nasics)
+	if err != nil {
+		return fmt.Errorf("could not configure chips for DIF=0x%x: %w", dif, err)
 	}
 	return nil
 }
@@ -154,11 +281,33 @@ func (srv *Server) OnReset(ctx tdaq.Context, resp *tdaq.Frame, req tdaq.Frame) e
 
 func (srv *Server) OnStart(ctx tdaq.Context, resp *tdaq.Frame, req tdaq.Frame) error {
 	ctx.Msg.Debugf("received /start command...")
+	for _, id := range srv.difs {
+		rdo, ok := srv.rdos[id]
+		if !ok {
+			return fmt.Errorf("could not find rdo w/ DIF=0x%x", id)
+		}
+
+		err := rdo.start()
+		if err != nil {
+			return fmt.Errorf("could not start readout for DIF=0x%x: %w", id, err)
+		}
+	}
 	return nil
 }
 
 func (srv *Server) OnStop(ctx tdaq.Context, resp *tdaq.Frame, req tdaq.Frame) error {
 	ctx.Msg.Debugf("received /stop command...")
+	for _, id := range srv.difs {
+		rdo, ok := srv.rdos[id]
+		if !ok {
+			return fmt.Errorf("could not find rdo w/ DIF=0x%x", id)
+		}
+
+		err := rdo.stop()
+		if err != nil {
+			return fmt.Errorf("could not stop readout for DIF=0x%x: %w", id, err)
+		}
+	}
 	return nil
 }
 

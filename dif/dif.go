@@ -5,6 +5,11 @@
 // Package dif holds functions to manipulate data from DIFs.
 package dif // import "github.com/go-lpc/mim/dif"
 
+import (
+	"fmt"
+	"strings"
+)
+
 // DIF represents a detector interface.
 type DIF struct {
 	Header GlobalHeader
@@ -41,5 +46,46 @@ type SCHeader struct {
 type DbInfo struct {
 	ID       uint32
 	NumASICs uint32
-	Slow     [MaxNumASICs][hardrocV2SLCFrameSize]byte
+	Slow     [][]byte // [MaxNumASICs][hardrocV2SLCFrameSize]byte
+}
+
+func slcStatus(slc uint32) (string, bool) {
+	var (
+		o  = new(strings.Builder)
+		ok = true
+	)
+	switch {
+	case slc&0x0003 == 0x01:
+		fmt.Fprintf(o, "SLC CRC OK     - ")
+	case slc&0x0003 == 0x02:
+		fmt.Fprintf(o, "SLC CRC Failed - ")
+		ok = false
+	default:
+		fmt.Fprintf(o, "SLC CRC forb   - ")
+		ok = false
+	}
+
+	switch {
+	case slc&0x000c == 0x04:
+		fmt.Fprintf(o, "All OK     - ")
+	case slc&0x000c == 0x08:
+		fmt.Fprintf(o, "All Failed - ")
+		ok = false
+	default:
+		fmt.Fprintf(o, "All forb   - ")
+		ok = false
+	}
+
+	switch {
+	case slc&0x0030 == 0x10:
+		fmt.Fprintf(o, "L1 OK     - ")
+	case slc&0x0030 == 0x20:
+		fmt.Fprintf(o, "L1 Failed - ")
+		ok = false
+	default:
+		fmt.Fprintf(o, "L1 forb   - ")
+		ok = false
+	}
+
+	return o.String(), ok
 }
