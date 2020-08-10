@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"net"
 	"os"
 	"path"
 	"path/filepath"
@@ -21,7 +22,6 @@ import (
 // TODO:
 //  - send file to eda-srv
 //  - send beat to eda-ctl
-//  - DIF-like data send
 
 const (
 	nRFM        = 4
@@ -33,7 +33,7 @@ const (
 	szCfgHR     = 4 + nHR*nBytesCfgHR
 	nChans      = 64
 
-	nReadoutsPerFile = 10000
+	daqBufferSize = nRFM * (26 + nHR*(2+128*20))
 )
 
 const (
@@ -90,6 +90,7 @@ type Device struct {
 		}
 
 		daq struct {
+			addr  string
 			fname string
 			floor [nRFM * nHR * 3]uint32
 			delta uint32 // delta threshold
@@ -115,9 +116,10 @@ type Device struct {
 		cycleID      [nRFM]uint32
 		bcid48Offset uint32
 
-		w     *wbuf
-		fname string   // current output DAQ file name
-		done  chan int // signal to stop daq
+		w   *wbuf    // DIF data buffer
+		sck net.Conn // DIF data sink
+
+		done chan int // signal to stop daq
 	}
 }
 
@@ -150,6 +152,12 @@ func WithCShaper(v uint32) Option {
 func WithDevSHM(dir string) Option {
 	return func(dev *Device) {
 		dev.cfg.run.dir = dir
+	}
+}
+
+func WithDAQAddr(addr string) Option {
+	return func(dev *Device) {
+		dev.cfg.daq.addr = addr
 	}
 }
 
@@ -217,6 +225,17 @@ func NewDevice(fname string, runnbr uint32, odir string, opts ...Option) (*Devic
 			_ = dev.mem.h2f.Close()
 		}
 	}()
+
+	if dev.cfg.daq.addr != "" {
+		conn, err := net.Dial("tcp", dev.cfg.daq.addr)
+		if err != nil {
+			return nil, fmt.Errorf(
+				"eda: could not dial DAQ data sink %q: %w",
+				dev.cfg.daq.addr, err,
+			)
+		}
+		dev.daq.sck = conn
+	}
 
 	return dev, nil
 }
@@ -426,7 +445,7 @@ func (dev *Device) initRun() error {
 		dev.cfg.daq.delta,
 		dev.cfg.hr.rshaper,
 		dev.cfg.daq.rfm,
-		"127.0.0.1", // FIXME(sbinet)
+		dev.cfg.daq.addr,
 		dev.run,
 	)
 	err = f.Close()
@@ -446,13 +465,6 @@ func (dev *Device) initRun() error {
 			fname, err,
 		)
 	}
-
-	// init run, prepare run file.
-	// use tmpfs to reduce writings on microSD flash mem.
-	dev.daq.fname = path.Join(
-		dev.cfg.run.dir,
-		fmt.Sprintf("eda_%03d.000.raw", dev.run),
-	)
 
 	err = dev.syncResetHR()
 	if err != nil {
@@ -511,42 +523,28 @@ func (dev *Device) Start() error {
 }
 
 func (dev *Device) loop() {
-	w := bufio.NewWriter(dev.msg.Writer())
-	defer w.Flush()
-
 	var (
+		w      = dev.msg.Writer()
 		printf = fmt.Fprintf
-		flush  = func() {
-			_ = w.Flush()
+		errorf = func(format string, args ...interface{}) {
+			dev.err = fmt.Errorf(format, args...)
+			dev.msg.Printf("%+v", dev.err)
 		}
-
-		err   error
 		cycle int
-		file  int
+		err   error
 	)
 
-	dev.daq.w = &wbuf{
-		p: make([]byte, nRFM*(26+nHR*(2+128*20))),
+	if dev.daq.sck != nil {
+		defer dev.daq.sck.Close()
 	}
 
-	f, err := os.Create(dev.daq.fname)
-	if err != nil {
-		dev.msg.Printf(
-			"error: could not create DAQ file %q: %+v",
-			dev.daq.fname, err,
-		)
-		dev.err = fmt.Errorf(
-			"eda: could not create DAQ output file %q: %w",
-			dev.daq.fname, err,
-		)
-		return
+	dev.daq.w = &wbuf{
+		p: make([]byte, daqBufferSize),
 	}
-	defer f.Close()
 
 	for {
 		// wait until new readout is started
 		printf(w, "trigger %07d, state: acq-", cycle)
-		flush()
 		for !dev.syncFPGARO() {
 			select {
 			case <-dev.daq.done:
@@ -557,7 +555,6 @@ func (dev *Device) loop() {
 		}
 
 		printf(w, "ro-") // readout of HR
-		flush()
 
 		// wait until readout is done.
 		for !dev.syncFIFOReady() {
@@ -569,60 +566,30 @@ func (dev *Device) loop() {
 			}
 		}
 		printf(w, "cp-") // copy
-		flush()
 
 		// read hardroc data
 		for _, rfm := range dev.rfms {
-			_ = dev.daqSaveHRDataAsDIF(f, rfm)
-			if false {
-				dev.daqWriteDIFData(dev.daq.w, rfm)
-			}
+			dev.daqWriteDIFData(dev.daq.w, rfm)
 		}
 		err = dev.syncAckFIFO()
 		if err != nil {
-			dev.msg.Printf("error: could not ACK FIFO: %+v", err)
-			dev.err = fmt.Errorf("eda: could not ACK FIFO: %w", err)
+			errorf("eda: could not ACK FIFO: %w", err)
+			return
+		}
+		printf(w, "tx-")
+		err = dev.daqSendDIFData()
+		if err != nil {
+			errorf("eda: could not send DIF data: %w", err)
 			return
 		}
 		printf(w, "\n")
-		flush()
-
 		cycle++
 
-		if cycle%nReadoutsPerFile == 0 {
-			err = f.Close()
-			if err != nil {
-				dev.msg.Printf("error: could not close DAQ file %q: %+v",
-					f.Name(), err,
-				)
-				dev.err = fmt.Errorf("eda: could not close DAQ file %q: %w",
-					f.Name(), err,
-				)
-				return
-			}
-
-			// FIXME(sbinet): send file to server.
-
-			file++
-			dev.daq.fname = path.Join(
-				dev.cfg.run.dir,
-				fmt.Sprintf("eda_%03d.%03d.raw",
-					dev.run, file,
-				),
-			)
-
-			f, err = os.Create(dev.daq.fname)
-			if err != nil {
-				dev.msg.Printf("error: could not create DAQ file %q: %+v",
-					dev.daq.fname,
-					err,
-				)
-				dev.err = fmt.Errorf("eda: could not create DAQ file %q: %w",
-					dev.daq.fname,
-					err,
-				)
-				return
-			}
+		select {
+		case <-dev.daq.done:
+			dev.daq.done <- 1
+			return
+		default:
 		}
 	}
 }

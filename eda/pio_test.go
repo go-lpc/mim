@@ -8,6 +8,8 @@ import (
 	"bytes"
 	"fmt"
 	"io/ioutil"
+	"log"
+	"net"
 	"os"
 	"path/filepath"
 	"testing"
@@ -753,6 +755,92 @@ func TestReadMask(t *testing.T) {
 
 			if got, want := err.Error(), tc.want.Error(); got != want {
 				t.Fatalf("invalid error:\ngot= %v\nwant=%v", got, want)
+			}
+		})
+	}
+}
+
+func TestDAQSendDIFData(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		conn func() net.Conn
+		err  error
+	}{
+		{
+			name: "no-header",
+			conn: func() net.Conn {
+				p1, p2 := net.Pipe()
+				go func() {
+					_ = p2.Close()
+				}()
+				return p1
+			},
+			err: fmt.Errorf("eda: could not send DIF data size header to pipe: io: read/write on closed pipe"),
+		},
+		{
+			name: "no-data",
+			conn: func() net.Conn {
+				p1, p2 := net.Pipe()
+				go func() {
+					defer p2.Close()
+					_, _ = p2.Read(make([]byte, 8))
+				}()
+				return p1
+			},
+			err: fmt.Errorf("eda: could not send DIF data to pipe: io: read/write on closed pipe"),
+		},
+		{
+			name: "no-ack",
+			conn: func() net.Conn {
+				p1, p2 := net.Pipe()
+				go func() {
+					defer p2.Close()
+					_, _ = p2.Read(make([]byte, 8))
+					_, _ = p2.Read(make([]byte, 66))
+				}()
+				return p1
+			},
+			err: fmt.Errorf("eda: could not read ACK DIF data from pipe: EOF"),
+		},
+		{
+			name: "invalid-ack",
+			conn: func() net.Conn {
+				p1, p2 := net.Pipe()
+				go func() {
+					defer p2.Close()
+					_, _ = p2.Read(make([]byte, 8))
+					_, _ = p2.Read(make([]byte, 66))
+					_, _ = p2.Write([]byte("ACQ\x00"))
+				}()
+				return p1
+			},
+			err: fmt.Errorf("eda: invalid ACK DIF data from pipe: \"ACQ\\x00\""),
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			dev := &Device{
+				msg: log.New(ioutil.Discard, "eda: ", 0),
+				run: 42,
+				buf: make([]byte, 4),
+			}
+			dev.daq.w = &wbuf{
+				p: make([]byte, daqBufferSize),
+				c: 66,
+			}
+			dev.daq.sck = tc.conn()
+			err := dev.daqSendDIFData()
+			switch {
+			case err == nil && tc.err == nil:
+				// ok.
+				return
+			case err == nil && tc.err != nil:
+				t.Fatalf("expected an error (%v)", tc.err)
+			case err != nil && tc.err == nil:
+				t.Fatalf("could not send DIF data: %+v", err)
+			case err != nil && tc.err != nil:
+				if got, want := err.Error(), tc.err.Error(); got != want {
+					t.Fatalf("invalid error:\ngot= %+v\nwant=%+v", got, want)
+				}
 			}
 		})
 	}

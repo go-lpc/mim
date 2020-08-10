@@ -1744,75 +1744,75 @@ func (dev *Device) daqFIFOEmpty(rfm int) bool {
 // 	return n / 5
 // }
 
-func (dev *Device) daqSaveHRDataAsDIF(w io.Writer, rfm int) uint32 {
-	var (
-		n   uint32
-		buf = bufio.NewWriter(w)
-		wU8 = func(v uint8) {
-			dev.buf[0] = v
-			_, _ = buf.Write(dev.buf[:1])
-		}
-		wU16 = func(v uint16) {
-			binary.BigEndian.PutUint16(dev.buf[:2], v)
-			_, _ = buf.Write(dev.buf[:2])
-		}
-		wU32 = func(v uint32) {
-			binary.BigEndian.PutUint32(dev.buf[:4], v)
-			_, _ = buf.Write(dev.buf[:4])
-		}
-	)
-	defer func() {
-		_ = buf.Flush()
-	}()
-
-	// DIF DAQ header,
-	wU8(0xB0)
-	wU8(difIDOffset + byte(dev.id&7)<<2 + byte(rfm)&3)
-	// counters
-	wU32(dev.daq.cycleID[rfm])
-	wU32(dev.cntHit0(rfm))
-	wU32(dev.cntHit1(rfm))
-	wU16(uint16(dev.cntBCID48MSB() & 0xffff))
-	wU32(dev.cntBCID48LSB())
-	bcid24 := dev.cntBCID24()
-	wU8(uint8(bcid24 >> 16))
-	wU16(uint16(bcid24 & 0xffff))
-	// unused "nb-lines"
-	wU8(0xff)
-
-	// HR DAQ chunk
-	var (
-		lastHR = -1
-		hrID   int
-	)
-	for !dev.daqFIFOEmpty(rfm) {
-		// read HR ID
-		id := dev.regs.fifo.daq[rfm].r()
-		hrID = int(id >> 24)
-		// insert trailer and header if new hardroc ID
-		if hrID != lastHR {
-			if lastHR >= 0 {
-				wU8(0xA3) // HR trailer
-			}
-			wU8(0xB4) // HR header
-		}
-		wU32(id)
-		for i := 0; i < 4; i++ {
-			wU32(dev.regs.fifo.daq[rfm].r())
-			n++
-		}
-		lastHR = hrID
-	}
-	wU8(0xA3)    // last HR trailer
-	wU8(0xA0)    // DIF DAQ trailer
-	wU16(0xC0C0) // fake CRC
-
-	// on-line monitoring
-	nRAMUnits := n / 5
-
-	dev.daq.cycleID[rfm]++
-	return nRAMUnits
-}
+// func (dev *Device) daqSaveHRDataAsDIF(w io.Writer, rfm int) uint32 {
+// 	var (
+// 		n   uint32
+// 		buf = bufio.NewWriter(w)
+// 		wU8 = func(v uint8) {
+// 			dev.buf[0] = v
+// 			_, _ = buf.Write(dev.buf[:1])
+// 		}
+// 		wU16 = func(v uint16) {
+// 			binary.BigEndian.PutUint16(dev.buf[:2], v)
+// 			_, _ = buf.Write(dev.buf[:2])
+// 		}
+// 		wU32 = func(v uint32) {
+// 			binary.BigEndian.PutUint32(dev.buf[:4], v)
+// 			_, _ = buf.Write(dev.buf[:4])
+// 		}
+// 	)
+// 	defer func() {
+// 		_ = buf.Flush()
+// 	}()
+//
+// 	// DIF DAQ header,
+// 	wU8(0xB0)
+// 	wU8(difIDOffset + byte(dev.id&7)<<2 + byte(rfm)&3)
+// 	// counters
+// 	wU32(dev.daq.cycleID[rfm])
+// 	wU32(dev.cntHit0(rfm))
+// 	wU32(dev.cntHit1(rfm))
+// 	wU16(uint16(dev.cntBCID48MSB() & 0xffff))
+// 	wU32(dev.cntBCID48LSB())
+// 	bcid24 := dev.cntBCID24()
+// 	wU8(uint8(bcid24 >> 16))
+// 	wU16(uint16(bcid24 & 0xffff))
+// 	// unused "nb-lines"
+// 	wU8(0xff)
+//
+// 	// HR DAQ chunk
+// 	var (
+// 		lastHR = -1
+// 		hrID   int
+// 	)
+// 	for !dev.daqFIFOEmpty(rfm) {
+// 		// read HR ID
+// 		id := dev.regs.fifo.daq[rfm].r()
+// 		hrID = int(id >> 24)
+// 		// insert trailer and header if new hardroc ID
+// 		if hrID != lastHR {
+// 			if lastHR >= 0 {
+// 				wU8(0xA3) // HR trailer
+// 			}
+// 			wU8(0xB4) // HR header
+// 		}
+// 		wU32(id)
+// 		for i := 0; i < 4; i++ {
+// 			wU32(dev.regs.fifo.daq[rfm].r())
+// 			n++
+// 		}
+// 		lastHR = hrID
+// 	}
+// 	wU8(0xA3)    // last HR trailer
+// 	wU8(0xA0)    // DIF DAQ trailer
+// 	wU16(0xC0C0) // fake CRC
+//
+// 	// on-line monitoring
+// 	nRAMUnits := n / 5
+//
+// 	dev.daq.cycleID[rfm]++
+// 	return nRAMUnits
+// }
 
 func (dev *Device) daqWriteDIFData(w io.Writer, rfm int) {
 	var (
@@ -1883,4 +1883,53 @@ func (dev *Device) daqWriteDIFData(w io.Writer, rfm int) {
 	wU16(0xC0C0) // fake CRC
 
 	dev.daq.cycleID[rfm]++
+}
+
+func (dev *Device) daqSendDIFData() error {
+	defer func() {
+		dev.daq.w.c = 0
+	}()
+
+	errorf := func(format string, args ...interface{}) error {
+		err := fmt.Errorf(format, args...)
+		dev.msg.Printf("%+v", err)
+		return err
+	}
+
+	hdr := make([]byte, 8)
+	copy(hdr, "HDR\x00")
+	binary.LittleEndian.PutUint32(hdr[4:], uint32(dev.daq.w.c))
+
+	_, err := dev.daq.sck.Write(hdr)
+	if err != nil {
+		return errorf(
+			"eda: could not send DIF data size header to %v: %w",
+			dev.daq.sck.RemoteAddr(), err,
+		)
+	}
+
+	_, err = dev.daq.sck.Write(dev.daq.w.p[:dev.daq.w.c])
+	if err != nil {
+		return errorf(
+			"eda: could not send DIF data to %v: %w",
+			dev.daq.sck.RemoteAddr(), err,
+		)
+	}
+
+	// wait for ACK
+	_, err = io.ReadFull(dev.daq.sck, hdr[:4])
+	if err != nil {
+		return errorf(
+			"eda: could not read ACK DIF data from %v: %+v",
+			dev.daq.sck.RemoteAddr(), err,
+		)
+	}
+	if string(hdr[:4]) != "ACK\x00" {
+		return errorf(
+			"eda: invalid ACK DIF data from %v: %q",
+			dev.daq.sck.RemoteAddr(), hdr[:4],
+		)
+	}
+
+	return nil
 }

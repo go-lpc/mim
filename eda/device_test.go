@@ -5,8 +5,12 @@
 package eda
 
 import (
+	"encoding/binary"
+	"errors"
 	"fmt"
+	"io"
 	"io/ioutil"
+	"net"
 	"os"
 	"path/filepath"
 	"strings"
@@ -17,6 +21,64 @@ import (
 )
 
 func TestRun(t *testing.T) {
+	const daqAddr = "127.0.0.1:8899"
+	srv, err := net.Listen("tcp", daqAddr)
+	if err != nil {
+		t.Fatalf("could not create DAQ data sink: %+v", err)
+	}
+	defer srv.Close()
+	done := make(chan int)
+	defer close(done)
+
+	go func() {
+		for {
+			conn, err := srv.Accept()
+			if err != nil {
+				select {
+				case <-done:
+					return
+				default:
+					t.Errorf("could not accept connection: %+v", err)
+					return
+				}
+			}
+			go func(c net.Conn) {
+				defer c.Close()
+				buf := make([]byte, 8+daqBufferSize)
+				for {
+					select {
+					case <-done:
+						return
+					default:
+						_, err := c.Read(buf[:8])
+						if err != nil {
+							if errors.Is(err, io.EOF) {
+								return
+							}
+							t.Errorf("could not read DAQ DIF header: %+v", err)
+							continue
+						}
+						size := binary.LittleEndian.Uint32(buf[4:8])
+						if size == 0 {
+							continue
+						}
+						_, err = c.Read(buf[:size])
+						if err != nil {
+							t.Errorf("could not read DAQ DIF data: %+v", err)
+							continue
+						}
+						copy(buf[:4], "ACK")
+						_, err = c.Write(buf[:4])
+						if err != nil {
+							t.Errorf("could not send back ACK: %+v", err)
+							continue
+						}
+					}
+				}
+			}(conn)
+		}
+	}()
+
 	for _, tc := range []struct {
 		rfm  int
 		done uint32
@@ -62,6 +124,8 @@ func TestRun(t *testing.T) {
 
 			dev, err := NewDevice(devmem.Name(), 42, tmpdir,
 				WithDevSHM(tmpdir),
+				WithCtlAddr(""),
+				WithDAQAddr(daqAddr),
 				WithConfigDir("./testdata"),
 				WithThreshold(0),
 				WithRFMMask(0),
@@ -134,7 +198,7 @@ func TestRun(t *testing.T) {
 			}...)
 
 			// loop data
-			for i := 0; i < 3*nReadoutsPerFile; i++ {
+			for i := 0; i < 3*1000; i++ {
 				fakeCtrl = append(fakeCtrl, []uint32{
 					0: 0x1c400022, // syncAckFIFO
 				}...)
@@ -142,7 +206,6 @@ func TestRun(t *testing.T) {
 				fakeState = append(fakeState, []uint32{
 					// trigger
 					0: regs.O_PLL_LCK | tc.done | regs.S_START_RO<<regs.SHIFT_SYNCHRO_STATE,
-					//1: regs.O_PLL_LCK | tc.done | ^uint32(regs.S_FIFO_READY<<regs.SHIFT_SYNCHRO_STATE),
 					1: regs.O_PLL_LCK | tc.done | regs.S_FIFO_READY<<regs.SHIFT_SYNCHRO_STATE,
 					2: regs.S_IDLE << regs.SHIFT_SYNCHRO_STATE,
 				}...)
@@ -519,6 +582,66 @@ func TestDumpConfig(t *testing.T) {
 					got, want,
 				)
 			}
+		})
+	}
+}
+
+func TestNewDevice(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		ctl  string
+		daq  string
+		err  error
+	}{
+		{
+			name: "invalid-eda-ctl-addr",
+			daq:  ":9999",
+			err:  fmt.Errorf("eda: could not dial DAQ data sink \":9999\": dial tcp :9999: connect: connection refused"),
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			tmpdir, err := ioutil.TempDir("", "eda-daq-")
+			if err != nil {
+				t.Fatalf("could not create tmp-dir: %+v", err)
+			}
+			defer os.RemoveAll(tmpdir)
+
+			devmem, err := os.Create(filepath.Join(tmpdir, "dev.mem"))
+			if err != nil {
+				t.Fatalf("could not create fake dev-mem: %+v", err)
+			}
+			defer devmem.Close()
+
+			_, err = devmem.WriteAt([]byte{1}, regs.LW_H2F_BASE+regs.LW_H2F_SPAN)
+			if err != nil {
+				t.Fatalf("could not write to dev-mem: %+v", err)
+			}
+			err = devmem.Close()
+			if err != nil {
+				t.Fatalf("could not close devmem: %+v", err)
+			}
+
+			dev, err := NewDevice(devmem.Name(), 42, tmpdir,
+				WithDevSHM(tmpdir),
+				WithCtlAddr(tc.ctl),
+				WithDAQAddr(tc.daq),
+				WithConfigDir("./testdata"),
+			)
+
+			switch {
+			case err != nil && tc.err != nil:
+				if got, want := err.Error(), tc.err.Error(); got != want {
+					t.Fatalf("invalid error:\ngot= %v\nwant=%v", got, want)
+				}
+				return
+			case err == nil && tc.err != nil:
+				t.Fatalf("invalid error:\ngot= %v\nwant=%v", nil, tc.err.Error())
+			case err != nil && tc.err == nil:
+				t.Fatalf("could not create fake device: %+v", err)
+			case err == nil && tc.err == nil:
+				// ok
+			}
+			defer dev.Close()
 		})
 	}
 }

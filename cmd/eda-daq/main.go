@@ -20,7 +20,8 @@ func main() {
 		threshold = flag.Int("thresh", -1, "threshold")
 		rshaper   = flag.Int("rshaper", -1, "R shaper")
 		rfmOn     = flag.Int("rfm", -1, "RFM-ON mask")
-		addr      = flag.String("addr", ":8877", "[address]:port to dial")
+		srvAddr   = flag.String("srv-addr", ":8877", "eda-srv [address]:port to dial")
+		dimAddr   = flag.String("dim-addr", ":8899", "eda-dim [address]:port to dial")
 		odir      = flag.String("o", "/home/root/run", "output dir")
 	)
 
@@ -44,7 +45,7 @@ func main() {
 
 	err := run(
 		uint32(*runnbr), uint32(*threshold), uint32(*rshaper), uint32(*rfmOn),
-		*addr, *odir,
+		*srvAddr, *dimAddr, *odir,
 		"/dev/mem", "dev/shm", "/dev/shm/config_base",
 	)
 	if err != nil {
@@ -52,15 +53,17 @@ func main() {
 	}
 }
 
-func run(run, threshold, rshaper, rfm uint32, addr, odir, devmem, devshm, cfgdir string) error {
-	conn, err := net.Dial("tcp", addr)
+func run(run, threshold, rshaper, rfm uint32, srvAddr, dimAddr, odir, devmem, devshm, cfgdir string) error {
+	conn, err := net.Dial("tcp", srvAddr)
 	if err != nil {
-		return fmt.Errorf("could not dial eda-srv %q: %w", addr, err)
+		return fmt.Errorf("could not dial eda-srv %q: %w", srvAddr, err)
 	}
 	defer conn.Close()
 
 	dev, err := eda.NewDevice(
 		devmem, run, odir,
+		eda.WithCtlAddr(":8877"),
+		eda.WithDAQAddr(dimAddr),
 		eda.WithThreshold(threshold),
 		eda.WithRShaper(rshaper),
 		eda.WithRFMMask(rfm),
