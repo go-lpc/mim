@@ -10,6 +10,8 @@ import (
 	"fmt"
 	"log"
 	"net"
+	"os"
+	"os/signal"
 
 	"github.com/go-lpc/mim/eda"
 )
@@ -60,6 +62,10 @@ func run(run, threshold, rshaper, rfm uint32, srvAddr, dimAddr, odir, devmem, de
 	}
 	defer conn.Close()
 
+	stop := make(chan os.Signal, 1)
+	signal.Notify(stop, os.Interrupt)
+	defer signal.Stop(stop)
+
 	dev, err := eda.NewDevice(
 		devmem, run, odir,
 		eda.WithCtlAddr(":8877"),
@@ -83,6 +89,18 @@ func run(run, threshold, rshaper, rfm uint32, srvAddr, dimAddr, odir, devmem, de
 	err = dev.Initialize()
 	if err != nil {
 		return fmt.Errorf("could not initialize EDA device: %w", err)
+	}
+
+	err = dev.Start()
+	if err != nil {
+		return fmt.Errorf("could not start EDA device: %w", err)
+	}
+
+	<-stop
+
+	err = dev.Stop()
+	if err != nil {
+		return fmt.Errorf("could not stop EDA device: %w", err)
 	}
 
 	return nil
