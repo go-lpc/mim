@@ -80,6 +80,10 @@ type Device struct {
 	}
 
 	cfg struct {
+		ctl struct {
+			addr string // addr+port to eda-ctl
+		}
+
 		hr struct {
 			fname   string
 			rshaper uint32 // resistance shaper
@@ -152,6 +156,12 @@ func WithCShaper(v uint32) Option {
 func WithDevSHM(dir string) Option {
 	return func(dev *Device) {
 		dev.cfg.run.dir = dir
+	}
+}
+
+func WithCtlAddr(addr string) Option {
+	return func(dev *Device) {
+		dev.cfg.ctl.addr = addr
 	}
 }
 
@@ -480,7 +490,24 @@ func (dev *Device) Start() error {
 		return fmt.Errorf("eda: could not init run: %w", err)
 	}
 
-	// FIXME(sbinet): reset-BCID
+	if addr := dev.cfg.ctl.addr; addr != "" {
+		dev.msg.Printf("sending 'eda-ready' message to %q...", addr)
+		conn, err := net.Dial("tcp", addr)
+		if err != nil {
+			return fmt.Errorf(
+				"eda: could not dial eda-ctl %q: %w",
+				addr, err,
+			)
+		}
+		defer conn.Close()
+
+		_, err = conn.Write([]byte("eda-ready"))
+		if err != nil {
+			return fmt.Errorf("eda: could not signal eda-ctl: %w", err)
+		}
+		dev.msg.Printf("sending 'eda-ready' message to %q... [done]", addr)
+	}
+
 	var dccCmd uint32 = 0xe
 	for dccCmd != regs.CMD_RESET_BCID {
 		dccCmd = dev.syncDCCCmdMem()
