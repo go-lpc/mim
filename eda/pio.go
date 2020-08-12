@@ -663,17 +663,17 @@ func (dev *Device) syncDCCCmdMem() uint32 {
 // 	state := dev.syncState()
 // 	return state == regs.S_RAMFULL
 // }
-
-func (dev *Device) syncFPGARO() bool {
-	state := dev.syncState()
-	return state == regs.S_START_RO || state == regs.S_WAIT_END_RO
-}
-
-func (dev *Device) syncFIFOReady() bool {
-	state := dev.syncState()
-	return state == regs.S_FIFO_READY
-}
-
+//
+// func (dev *Device) syncFPGARO() bool {
+// 	state := dev.syncState()
+// 	return state == regs.S_START_RO || state == regs.S_WAIT_END_RO
+// }
+//
+// func (dev *Device) syncFIFOReady() bool {
+// 	state := dev.syncState()
+// 	return state == regs.S_FIFO_READY
+// }
+//
 // func (dev *Device) syncRunStopped() bool {
 // 	state := dev.syncState()
 // 	return state == regs.S_STOP_RUN
@@ -1885,7 +1885,7 @@ func (dev *Device) daqWriteDIFData(w io.Writer, rfm int) {
 	dev.daq.cycleID[rfm]++
 }
 
-func (dev *Device) daqSendDIFData() error {
+func (dev *Device) daqSendDIFData(buf []byte) error {
 	defer func() {
 		dev.daq.w.c = 0
 	}()
@@ -1896,7 +1896,7 @@ func (dev *Device) daqSendDIFData() error {
 		return err
 	}
 
-	hdr := make([]byte, 8)
+	hdr := buf[:8]
 	copy(hdr, "HDR\x00")
 	binary.LittleEndian.PutUint32(hdr[4:], uint32(dev.daq.w.c))
 

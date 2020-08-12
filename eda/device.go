@@ -557,6 +557,7 @@ func (dev *Device) loop() {
 			dev.err = fmt.Errorf(format, args...)
 			dev.msg.Printf("%+v", dev.err)
 		}
+		buf   = make([]byte, 8)
 		cycle int
 		err   error
 	)
@@ -570,26 +571,23 @@ func (dev *Device) loop() {
 	}
 
 	for {
-		// wait until new readout is started
 		printf(w, "trigger %07d, state: acq-", cycle)
-		for !dev.syncFPGARO() {
-			select {
-			case <-dev.daq.done:
-				dev.daq.done <- 1
-				return
+		// wait until readout is done
+	readout:
+		for {
+			state := dev.syncState()
+			switch state {
+			case regs.S_START_RO, regs.S_WAIT_END_RO:
+				printf(w, "ro-") // readout of HR
+			case regs.S_FIFO_READY:
+				break readout
 			default:
-			}
-		}
-
-		printf(w, "ro-") // readout of HR
-
-		// wait until readout is done.
-		for !dev.syncFIFOReady() {
-			select {
-			case <-dev.daq.done:
-				dev.daq.done <- 1
-				return
-			default:
+				select {
+				case <-dev.daq.done:
+					dev.daq.done <- 1
+					return
+				default:
+				}
 			}
 		}
 		printf(w, "cp-") // copy
@@ -604,7 +602,7 @@ func (dev *Device) loop() {
 			return
 		}
 		printf(w, "tx-")
-		err = dev.daqSendDIFData()
+		err = dev.daqSendDIFData(buf)
 		if err != nil {
 			errorf("eda: could not send DIF data: %w", err)
 			return

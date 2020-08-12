@@ -818,6 +818,7 @@ func TestDAQSendDIFData(t *testing.T) {
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
+			buf := make([]byte, 8)
 			dev := &Device{
 				msg: log.New(ioutil.Discard, "eda: ", 0),
 				run: 42,
@@ -828,7 +829,7 @@ func TestDAQSendDIFData(t *testing.T) {
 				c: 66,
 			}
 			dev.daq.sck = tc.conn()
-			err := dev.daqSendDIFData()
+			err := dev.daqSendDIFData(buf)
 			switch {
 			case err == nil && tc.err == nil:
 				// ok.
