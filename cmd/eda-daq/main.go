@@ -12,6 +12,8 @@ import (
 	"net"
 	"os"
 	"os/signal"
+	"runtime/pprof"
+	"syscall"
 
 	"github.com/go-lpc/mim/eda"
 )
@@ -63,7 +65,7 @@ func run(run, threshold, rshaper, rfm uint32, srvAddr, dimAddr, odir, devmem, de
 	defer conn.Close()
 
 	stop := make(chan os.Signal, 1)
-	signal.Notify(stop, os.Interrupt)
+	signal.Notify(stop, os.Interrupt, syscall.SIGUSR1)
 	defer signal.Stop(stop)
 
 	dev, err := eda.NewDevice(
@@ -96,7 +98,15 @@ func run(run, threshold, rshaper, rfm uint32, srvAddr, dimAddr, odir, devmem, de
 		return fmt.Errorf("could not start EDA device: %w", err)
 	}
 
-	<-stop
+loop:
+	for v := range stop {
+		switch v {
+		case syscall.SIGUSR1:
+			printStacks()
+		case syscall.SIGINT:
+			break loop
+		}
+	}
 
 	err = dev.Stop()
 	if err != nil {
@@ -104,4 +114,8 @@ func run(run, threshold, rshaper, rfm uint32, srvAddr, dimAddr, odir, devmem, de
 	}
 
 	return nil
+}
+
+func printStacks() {
+	_ = pprof.Lookup("goroutine").WriteTo(os.Stdout, 1)
 }
