@@ -2,7 +2,7 @@ language: go
 go_import_path: github.com/go-lpc/mim
 
 go:
- - 1.14.x
+ - 1.15.x
 
 os:
  - linux
@@ -22,7 +22,7 @@ git:
 matrix:
  fast_finish: true
  include:
-   - go: 1.14.x
+   - go: 1.15.x
      env:
        - TAGS=""
    - go: master
