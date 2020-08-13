@@ -21,63 +21,64 @@ import (
 )
 
 func TestRun(t *testing.T) {
-	const daqAddr = "127.0.0.1:8899"
-	srv, err := net.Listen("tcp", daqAddr)
-	if err != nil {
-		t.Fatalf("could not create DAQ data sink: %+v", err)
-	}
-	defer srv.Close()
-	done := make(chan int)
-	defer close(done)
+	const (
+		daqAddr = ":9999"
+		edaID   = 1
+	)
 
-	go func() {
-		for {
+	sink := func(done chan int, rfm int) string {
+		srv, err := net.Listen("tcp", ":0")
+		if err != nil {
+			t.Fatalf("could not create rfm-server: %+v", err)
+		}
+		go func() {
 			conn, err := srv.Accept()
 			if err != nil {
 				select {
 				case <-done:
 					return
 				default:
-					t.Errorf("could not accept connection: %+v", err)
+					t.Errorf("could not accept connection from rfm-server: %+v", err)
 					return
 				}
 			}
-			go func(c net.Conn) {
-				defer c.Close()
-				buf := make([]byte, 8+daqBufferSize)
-				for {
-					select {
-					case <-done:
-						return
-					default:
-						_, err := c.Read(buf[:8])
-						if err != nil {
-							if errors.Is(err, io.EOF) {
-								return
-							}
-							t.Errorf("could not read DAQ DIF header: %+v", err)
-							continue
+			defer conn.Close()
+			defer srv.Close()
+
+			buf := make([]byte, 8+daqBufferSize)
+			for {
+				select {
+				case <-done:
+					return
+				default:
+					_, err := conn.Read(buf[:8])
+					if err != nil {
+						if errors.Is(err, io.EOF) {
+							return
 						}
-						size := binary.LittleEndian.Uint32(buf[4:8])
-						if size == 0 {
-							continue
-						}
-						_, err = c.Read(buf[:size])
-						if err != nil {
-							t.Errorf("could not read DAQ DIF data: %+v", err)
-							continue
-						}
-						copy(buf[:4], "ACK")
-						_, err = c.Write(buf[:4])
-						if err != nil {
-							t.Errorf("could not send back ACK: %+v", err)
-							continue
-						}
+						t.Errorf("could not read DAQ DIF header: %+v", err)
+						continue
+					}
+					size := binary.LittleEndian.Uint32(buf[4:8])
+					if size == 0 {
+						continue
+					}
+					_, err = conn.Read(buf[:size])
+					if err != nil {
+						t.Errorf("could not read DAQ DIF data: %+v", err)
+						continue
+					}
+					copy(buf[:4], "ACK\x00")
+					_, err = conn.Write(buf[:4])
+					if err != nil {
+						t.Errorf("could not send back ACK: %+v", err)
+						continue
 					}
 				}
-			}(conn)
-		}
-	}()
+			}
+		}()
+		return srv.Addr().String()
+	}
 
 	for _, tc := range []struct {
 		rfm  int
@@ -101,6 +102,11 @@ func TestRun(t *testing.T) {
 		},
 	} {
 		t.Run(fmt.Sprintf("rfm=%d", tc.rfm), func(t *testing.T) {
+			done := make(chan int)
+			defer close(done)
+
+			rfmAddr := sink(done, tc.rfm)
+
 			tmpdir, err := ioutil.TempDir("", "eda-daq-")
 			if err != nil {
 				t.Fatalf("could not create tmp-dir: %+v", err)
@@ -125,7 +131,6 @@ func TestRun(t *testing.T) {
 			dev, err := NewDevice(devmem.Name(), 42, tmpdir,
 				WithDevSHM(tmpdir),
 				WithCtlAddr(""),
-				WithDAQAddr(daqAddr),
 				WithConfigDir("./testdata"),
 				WithThreshold(0),
 				WithRFMMask(0),
@@ -137,7 +142,9 @@ func TestRun(t *testing.T) {
 			}
 			defer dev.Close()
 
+			dev.id = edaID
 			dev.rfms = []int{tc.rfm}
+			dev.cfg.daq.addrs = []string{rfmAddr}
 
 			var (
 				fakeCtrl   []uint32
@@ -587,15 +594,14 @@ func TestDumpConfig(t *testing.T) {
 }
 
 func TestNewDevice(t *testing.T) {
+	t.Skip()
 	for _, tc := range []struct {
 		name string
 		ctl  string
-		daq  string
 		err  error
 	}{
 		{
 			name: "invalid-eda-ctl-addr",
-			daq:  ":9999",
 			err:  fmt.Errorf("eda: could not dial DAQ data sink \":9999\": dial tcp :9999: connect: connection refused"),
 		},
 	} {
@@ -624,7 +630,6 @@ func TestNewDevice(t *testing.T) {
 			dev, err := NewDevice(devmem.Name(), 42, tmpdir,
 				WithDevSHM(tmpdir),
 				WithCtlAddr(tc.ctl),
-				WithDAQAddr(tc.daq),
 				WithConfigDir("./testdata"),
 			)
 

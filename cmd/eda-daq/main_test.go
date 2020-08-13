@@ -58,7 +58,7 @@ func TestRun(t *testing.T) {
 		rfmMask   = 1
 	)
 
-	err = run(runID, threshold, rshaper, rfmMask, ":8877", ":8899",
+	err = run(runID, threshold, rshaper, rfmMask, ":8877",
 		"outdir", devmem.Name(), devshm, "../../eda/testdata",
 	)
 	if err != nil {

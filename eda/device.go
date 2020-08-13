@@ -17,6 +17,7 @@ import (
 
 	"github.com/go-lpc/mim/eda/internal/regs"
 	"github.com/go-lpc/mim/internal/mmap"
+	"golang.org/x/sync/errgroup"
 )
 
 // TODO:
@@ -94,11 +95,12 @@ type Device struct {
 		}
 
 		daq struct {
-			addr  string
 			fname string
 			floor [nRFM * nHR * 3]uint32
 			delta uint32 // delta threshold
 			rfm   uint32 // RFM ON mask
+
+			addrs []string // [addr:port]s for sending DIF data
 		}
 
 		preamp struct {
@@ -120,10 +122,13 @@ type Device struct {
 		cycleID      [nRFM]uint32
 		bcid48Offset uint32
 
-		w   *wbuf    // DIF data buffer
-		sck net.Conn // DIF data sink
+		w   *wbuf      // DIF data buffer
+		sck []net.Conn // DIF data sinks, one per RFM
 
-		done chan int // signal to stop daq
+		bcid chan uint32 // signal BCID reset
+		done chan int    // signal to stop daq
+
+		f *os.File
 	}
 }
 
@@ -165,12 +170,6 @@ func WithCtlAddr(addr string) Option {
 	}
 }
 
-func WithDAQAddr(addr string) Option {
-	return func(dev *Device) {
-		dev.cfg.daq.addr = addr
-	}
-}
-
 func WithConfigDir(dir string) Option {
 	return func(dev *Device) {
 		dev.cfg.hr.fname = filepath.Join(dir, "conf_base.csv")
@@ -178,6 +177,62 @@ func WithConfigDir(dir string) Option {
 		dev.cfg.preamp.fname = filepath.Join(dir, "pa_gain_4rfm.csv")
 		dev.cfg.mask.fname = filepath.Join(dir, "mask_4rfm.csv")
 	}
+}
+
+func newDevice(devmem, odir, devshm, cfgdir string) (*Device, error) {
+	mem, err := os.OpenFile(devmem, os.O_RDWR|os.O_SYNC, 0666)
+	if err != nil {
+		return nil, fmt.Errorf("eda: could not open %q: %w", devmem, err)
+	}
+	defer func() {
+		if err != nil {
+			_ = mem.Close()
+		}
+	}()
+
+	dev := &Device{
+		msg: log.New(os.Stdout, "eda: ", 0),
+		dir: odir,
+		buf: make([]byte, 4),
+	}
+	dev.mem.fd = mem
+	dev.cfg.hr.cshaper = 3
+	dev.cfg.daq.rfm = (1 << 0) | (1 << 1) // FIXME(sbinet): remove. take from config.
+	WithConfigDir(cfgdir)(dev)
+	WithDevSHM(devshm)(dev)
+
+	dev.cfg.hr.data = dev.cfg.hr.buf[4:]
+
+	// setup RFMs indices from provided mask
+	dev.rfms = nil
+	for i := 0; i < nRFM; i++ {
+		if (dev.cfg.daq.rfm>>i)&1 == 1 {
+			dev.rfms = append(dev.rfms, i)
+		}
+	}
+
+	err = dev.mmapLwH2F()
+	if err != nil {
+		return nil, fmt.Errorf("eda: could not initialize lightweight HPS-to-FPGA bus: %w", err)
+	}
+	defer func() {
+		if err != nil {
+			_ = dev.mem.lw.Close()
+		}
+	}()
+
+	err = dev.mmapH2F()
+	if err != nil {
+		return nil, fmt.Errorf("eda: could not initialize HPS-to-FPGA bus: %w", err)
+	}
+	defer func() {
+		if err != nil {
+			_ = dev.mem.h2f.Close()
+		}
+	}()
+
+	return dev, nil
+
 }
 
 func NewDevice(fname string, runnbr uint32, odir string, opts ...Option) (*Device, error) {
@@ -236,17 +291,6 @@ func NewDevice(fname string, runnbr uint32, odir string, opts ...Option) (*Devic
 		}
 	}()
 
-	if dev.cfg.daq.addr != "" {
-		conn, err := net.Dial("tcp", dev.cfg.daq.addr)
-		if err != nil {
-			return nil, fmt.Errorf(
-				"eda: could not dial DAQ data sink %q: %w",
-				dev.cfg.daq.addr, err,
-			)
-		}
-		dev.daq.sck = conn
-	}
-
 	return dev, nil
 }
 
@@ -275,6 +319,13 @@ func (dev *Device) Configure() error {
 }
 
 func (dev *Device) Initialize() error {
+	if len(dev.cfg.daq.addrs) != 0 {
+		dev.daq.sck = make([]net.Conn, len(dev.rfms))
+		for i := range dev.rfms {
+			dev.serveRFM(i, dev.cfg.daq.addrs[i])
+		}
+	}
+
 	err := dev.initFPGA()
 	if err != nil {
 		return fmt.Errorf("eda: could not initialize FPGA: %w", err)
@@ -285,6 +336,16 @@ func (dev *Device) Initialize() error {
 		return fmt.Errorf("eda: could not initialize HardRoc: %w", err)
 	}
 
+	dev.daq.bcid = make(chan uint32)
+	go func() {
+		var dccCmd uint32 = 0xe
+		dev.msg.Printf("launching reset-BCID goroutine...")
+		for dccCmd != regs.CMD_RESET_BCID {
+			dccCmd = dev.syncDCCCmdMem()
+		}
+		dev.msg.Printf("launching reset-BCID goroutine... [done: v=0x%x]", dccCmd)
+		dev.daq.bcid <- dccCmd
+	}()
 	return nil
 }
 
@@ -431,86 +492,20 @@ func (dev *Device) initHR() error {
 	return nil
 }
 
-func (dev *Device) initRun() error {
-	// save run-dependant settings
-	dev.msg.Printf(
-		"thresh_delta=%d, Rshaper=%d, RFM=%d\n",
-		dev.cfg.daq.delta,
-		dev.cfg.hr.rshaper,
-		dev.cfg.daq.rfm,
-	)
-
-	fname := path.Join(dev.dir, fmt.Sprintf("settings_%03d.csv", dev.run))
-	f, err := os.Create(fname)
-	if err != nil {
-		return fmt.Errorf(
-			"eda: could not create settings file %q: %w",
-			fname, err,
-		)
-	}
-	defer f.Close()
-
-	fmt.Fprintf(f,
-		"thresh_delta=%d; Rshaper=%d; RFM=%d; ip_addr=%s; run_id=%d\n",
-		dev.cfg.daq.delta,
-		dev.cfg.hr.rshaper,
-		dev.cfg.daq.rfm,
-		dev.cfg.daq.addr,
-		dev.run,
-	)
-	err = f.Close()
-	if err != nil {
-		return fmt.Errorf(
-			"eda: could not close settings file %q: %w",
-			fname, err,
-		)
-	}
-
-	dev.msg.Printf("-----------------RUN NB %d-----------------\n", dev.run)
-	fname = path.Join(dev.dir, fmt.Sprintf("hr_sc_%03d.csv", dev.run))
-	err = dev.hrscWriteConfHRs(fname)
-	if err != nil {
-		return fmt.Errorf(
-			"eda: could not write HR config file %q: %w",
-			fname, err,
-		)
-	}
-
-	err = dev.syncResetHR()
-	if err != nil {
-		return fmt.Errorf("eda: could not reset hardroc: %w", err)
-	}
-
-	return nil
-}
-
 func (dev *Device) Start() error {
 	err := dev.initRun()
 	if err != nil {
 		return fmt.Errorf("eda: could not init run: %w", err)
 	}
 
-	if addr := dev.cfg.ctl.addr; addr != "" {
-		dev.msg.Printf("sending 'eda-ready' message to %q...", addr)
-		conn, err := net.Dial("tcp", addr)
-		if err != nil {
-			return fmt.Errorf(
-				"eda: could not dial eda-ctl %q: %w",
-				addr, err,
-			)
-		}
-		defer conn.Close()
-
-		_, err = conn.Write([]byte("eda-ready"))
-		if err != nil {
-			return fmt.Errorf("eda: could not signal eda-ctl: %w", err)
-		}
-		dev.msg.Printf("sending 'eda-ready' message to %q... [done]", addr)
-	}
-
-	var dccCmd uint32 = 0xe
-	for dccCmd != regs.CMD_RESET_BCID {
-		dccCmd = dev.syncDCCCmdMem()
+	dev.msg.Printf("waiting for reset-BCID...")
+	timer := time.NewTimer(10 * time.Second)
+	defer timer.Stop()
+	select {
+	case <-timer.C:
+		dev.msg.Printf("waiting for reset-BCID... [timeout]")
+	case v := <-dev.daq.bcid:
+		dev.msg.Printf("waiting for reset-BCID... [ok=0x%x]", v)
 	}
 
 	dev.msg.Printf("sync-state: %[1]d 0x%[1]x\n", dev.syncState())
@@ -549,6 +544,71 @@ func (dev *Device) Start() error {
 	return nil
 }
 
+func (dev *Device) initRun() error {
+	// save run-dependant settings
+	dev.msg.Printf(
+		"thresh_delta=%d, Rshaper=%d, RFM=%d\n",
+		dev.cfg.daq.delta,
+		dev.cfg.hr.rshaper,
+		dev.cfg.daq.rfm,
+	)
+
+	fname := path.Join(dev.dir, fmt.Sprintf("settings_%03d.csv", dev.run))
+	f, err := os.Create(fname)
+	if err != nil {
+		return fmt.Errorf(
+			"eda: could not create settings file %q: %w",
+			fname, err,
+		)
+	}
+	defer f.Close()
+
+	fmt.Fprintf(f,
+		"thresh_delta=%d; Rshaper=%d; RFM=%d; ip_addr=:9999; run_id=%d\n",
+		dev.cfg.daq.delta,
+		dev.cfg.hr.rshaper,
+		dev.cfg.daq.rfm,
+		dev.run,
+	)
+	err = f.Close()
+	if err != nil {
+		return fmt.Errorf(
+			"eda: could not close settings file %q: %w",
+			fname, err,
+		)
+	}
+
+	dev.msg.Printf("-----------------RUN NB %d-----------------\n", dev.run)
+	fname = path.Join(dev.dir, fmt.Sprintf("hr_sc_%03d.csv", dev.run))
+	err = dev.hrscWriteConfHRs(fname)
+	if err != nil {
+		return fmt.Errorf(
+			"eda: could not write HR config file %q: %w",
+			fname, err,
+		)
+	}
+
+	err = dev.syncResetHR()
+	if err != nil {
+		return fmt.Errorf("eda: could not reset hardroc: %w", err)
+	}
+
+	return nil
+}
+
+func (dev *Device) serveRFM(i int, addr string) {
+	rfm := dev.rfms[i]
+	dev.msg.Printf("dialing RFM(%d) to %q...", rfm, addr)
+
+	conn, err := net.Dial("tcp", addr)
+	if err != nil {
+		dev.msg.Printf("could not connect to %q for rfm=%d: %+v", addr, rfm, err)
+		return
+	}
+	dev.daq.sck[i] = conn
+	dev.msg.Printf("dialing RFM(%d) to %q... [ok]", rfm, addr)
+}
+
 func (dev *Device) loop() {
 	var (
 		w      = dev.msg.Writer()
@@ -562,13 +622,25 @@ func (dev *Device) loop() {
 		err   error
 	)
 
-	if dev.daq.sck != nil {
-		defer dev.daq.sck.Close()
+	if len(dev.daq.sck) != 0 {
+		for _, sck := range dev.daq.sck {
+			if sck == nil {
+				continue
+			}
+			defer sck.Close()
+		}
 	}
 
 	dev.daq.w = &wbuf{
 		p: make([]byte, daqBufferSize),
 	}
+
+	dev.daq.f, err = os.Create("/dev/shm/out.raw")
+	if err != nil {
+		errorf("could not create output data file: %+v", err)
+		return
+	}
+	defer dev.daq.f.Close()
 
 	for {
 		printf(w, "trigger %07d, state: acq-", cycle)
@@ -577,8 +649,10 @@ func (dev *Device) loop() {
 		for {
 			state := dev.syncState()
 			switch state {
-			case regs.S_START_RO, regs.S_WAIT_END_RO:
+			case regs.S_START_RO:
 				printf(w, "ro-") // readout of HR
+			case regs.S_WAIT_END_RO:
+				// ok.
 			case regs.S_FIFO_READY:
 				break readout
 			default:
@@ -602,11 +676,25 @@ func (dev *Device) loop() {
 			return
 		}
 		printf(w, "tx-")
-		err = dev.daqSendDIFData(buf)
+		var grp errgroup.Group
+		for i := range dev.daq.sck {
+			ii := i
+			sck := dev.daq.sck[ii]
+			grp.Go(func() error {
+				err := dev.daqSendDIFData(sck, buf)
+				if err != nil {
+					errorf("eda: could not send DIF data (RFM=%d): %w", dev.rfms[ii], err)
+					return err
+				}
+				return nil
+			})
+		}
+		err = grp.Wait()
 		if err != nil {
 			errorf("eda: could not send DIF data: %w", err)
 			return
 		}
+
 		printf(w, "\n")
 		cycle++
 
