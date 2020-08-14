@@ -13,7 +13,7 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/go-lpc/mim/dif"
+	"github.com/go-lpc/mim/internal/eformat"
 	"go-hep.org/x/hep/lcio"
 )
 
@@ -27,12 +27,12 @@ func TestEDA2LCIO(t *testing.T) {
 	for _, tc := range []struct {
 		name string
 		eda  bool
-		data dif.DIF
+		data eformat.DIF
 	}{
 		{
 			name: "eda_063.000",
-			data: dif.DIF{
-				Header: dif.GlobalHeader{
+			data: eformat.DIF{
+				Header: eformat.GlobalHeader{
 					ID:        0x42,
 					DTC:       10,
 					ATC:       11,
@@ -40,7 +40,7 @@ func TestEDA2LCIO(t *testing.T) {
 					AbsBCID:   0x0000112233445566,
 					TimeDIFTC: 0x00112233,
 				},
-				Frames: []dif.Frame{
+				Frames: []eformat.Frame{
 					{
 						Header: 1,
 						BCID:   0x001a1b1c,
@@ -69,7 +69,7 @@ func TestEDA2LCIO(t *testing.T) {
 			}
 			defer f.Close()
 
-			err = dif.NewEncoder(f).Encode(&tc.data)
+			err = eformat.NewEncoder(f).Encode(&tc.data)
 			if err != nil {
 				t.Fatalf("could not encode EDA: %+v", err)
 			}
@@ -90,7 +90,7 @@ func TestEDA2LCIO(t *testing.T) {
 			}
 			defer lw.Close()
 
-			err = EDA2LCIO(lw, dif.NewDecoder(tc.data.Header.ID, bytes.NewReader(edabuf)), run, msg)
+			err = EDA2LCIO(lw, eformat.NewDecoder(tc.data.Header.ID, bytes.NewReader(edabuf)), run, msg)
 			if err != nil {
 				t.Fatalf("could not convert to LCIO: %+v", err)
 			}
@@ -126,8 +126,8 @@ func TestEDA2LCIO(t *testing.T) {
 				t.Fatalf("could not read EDA file: %+v", err)
 			}
 
-			var got dif.DIF
-			err = dif.NewDecoder(tc.data.Header.ID, bytes.NewReader(edagot)).Decode(&got)
+			var got eformat.DIF
+			err = eformat.NewDecoder(tc.data.Header.ID, bytes.NewReader(edagot)).Decode(&got)
 			if err != nil {
 				t.Fatalf("could not decode EDA file: %+v", err)
 			}

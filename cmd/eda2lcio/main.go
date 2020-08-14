@@ -14,7 +14,7 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/go-lpc/mim/dif"
+	"github.com/go-lpc/mim/internal/eformat"
 	"github.com/go-lpc/mim/internal/xcnv"
 	"go-hep.org/x/hep/lcio"
 )
@@ -78,7 +78,7 @@ func process(oname string, lvl int, fname string) error {
 
 	w.SetCompressionLevel(lvl)
 
-	dec := dif.NewDecoder(edaIDFrom(f), f)
+	dec := eformat.NewDecoder(edaIDFrom(f), f)
 	err = xcnv.EDA2LCIO(w, dec, run, msg)
 	if err != nil {
 		return fmt.Errorf("could not convert EDA to LCIO: %w", err)

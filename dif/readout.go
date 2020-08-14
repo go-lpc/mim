@@ -11,6 +11,7 @@ import (
 
 	"github.com/go-daq/tdaq/log"
 	"github.com/go-lpc/mim/internal/crc16"
+	"github.com/go-lpc/mim/internal/eformat"
 )
 
 type asicKind uint32
@@ -244,9 +245,9 @@ func (rdo *Readout) configureChips(scFrame [][]byte) (uint32, error) {
 
 func (rdo *Readout) Readout(p []byte) (int, error) {
 	var (
-		dif DIF
+		dif eformat.DIF
 		w   = bwriter{p: p}
-		dec = NewDecoder(uint8(rdo.difID), io.TeeReader(rdo.dev.ft, &w))
+		dec = eformat.NewDecoder(uint8(rdo.difID), io.TeeReader(rdo.dev.ft, &w))
 	)
 	err := dec.Decode(&dif)
 	if err != nil {

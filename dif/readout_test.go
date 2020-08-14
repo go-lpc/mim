@@ -14,6 +14,7 @@ import (
 	"testing"
 
 	"github.com/go-daq/tdaq/log"
+	"github.com/go-lpc/mim/internal/eformat"
 	"github.com/ziutek/ftdi"
 )
 
@@ -104,8 +105,8 @@ func TestReadout(t *testing.T) {
 	data := make([]byte, MaxEventSize)
 	{
 		w := new(bytes.Buffer)
-		dif := DIF{
-			Header: GlobalHeader{
+		dif := eformat.DIF{
+			Header: eformat.GlobalHeader{
 				ID:        uint8(rdo.difID),
 				DTC:       10,
 				ATC:       11,
@@ -113,7 +114,7 @@ func TestReadout(t *testing.T) {
 				AbsBCID:   0x0000112233445566,
 				TimeDIFTC: 0x00112233,
 			},
-			Frames: []Frame{
+			Frames: []eformat.Frame{
 				{
 					Header: 1,
 					BCID:   0x001a1b1c,
@@ -129,7 +130,7 @@ func TestReadout(t *testing.T) {
 				},
 			},
 		}
-		err = NewEncoder(w).Encode(&dif)
+		err = eformat.NewEncoder(w).Encode(&dif)
 		if err != nil {
 			t.Fatalf("could not encode DIF data: %+v", err)
 		}

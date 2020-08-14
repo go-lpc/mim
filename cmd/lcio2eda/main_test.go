@@ -11,7 +11,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/go-lpc/mim/dif"
+	"github.com/go-lpc/mim/internal/eformat"
 	"github.com/go-lpc/mim/internal/xcnv"
 	"go-hep.org/x/hep/lcio"
 )
@@ -23,8 +23,8 @@ func TestLCIO2EDA(t *testing.T) {
 	}
 	defer os.RemoveAll(tmp)
 
-	refdif := dif.DIF{
-		Header: dif.GlobalHeader{
+	refdif := eformat.DIF{
+		Header: eformat.GlobalHeader{
 			ID:        0x42,
 			DTC:       10,
 			ATC:       11,
@@ -32,7 +32,7 @@ func TestLCIO2EDA(t *testing.T) {
 			AbsBCID:   0x0000112233445566,
 			TimeDIFTC: 0x00112233,
 		},
-		Frames: []dif.Frame{
+		Frames: []eformat.Frame{
 			{
 				Header: 1,
 				BCID:   0x001a1b1c,
@@ -57,7 +57,7 @@ func TestLCIO2EDA(t *testing.T) {
 	}
 	defer edaf.Close()
 
-	err = dif.NewEncoder(edaf).Encode(&refdif)
+	err = eformat.NewEncoder(edaf).Encode(&refdif)
 	if err != nil {
 		t.Fatalf("could not encode EDA: %+v", err)
 	}
@@ -78,7 +78,7 @@ func TestLCIO2EDA(t *testing.T) {
 	}
 	defer lw.Close()
 
-	err = xcnv.EDA2LCIO(lw, dif.NewDecoder(refdif.Header.ID, bytes.NewReader(edabuf)), run, msg)
+	err = xcnv.EDA2LCIO(lw, eformat.NewDecoder(refdif.Header.ID, bytes.NewReader(edabuf)), run, msg)
 	if err != nil {
 		t.Fatalf("could not convert to LCIO: %+v", err)
 	}

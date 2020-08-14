@@ -14,11 +14,11 @@ import (
 	"reflect"
 	"unsafe"
 
-	"github.com/go-lpc/mim/dif"
+	"github.com/go-lpc/mim/internal/eformat"
 	"go-hep.org/x/hep/lcio"
 )
 
-func EDA2LCIO(w *lcio.Writer, dec *dif.Decoder, run int32, msg *log.Logger) error {
+func EDA2LCIO(w *lcio.Writer, dec *eformat.Decoder, run int32, msg *log.Logger) error {
 	var (
 		buf = new(bytes.Buffer)
 		raw = &lcio.GenericObject{
@@ -33,7 +33,7 @@ loop:
 		if i%100 == 0 {
 			msg.Printf("processing evt %d...", i)
 		}
-		var d dif.DIF
+		var d eformat.DIF
 		err := dec.Decode(&d)
 		if err != nil {
 			if errors.Is(err, io.EOF) {
@@ -77,12 +77,12 @@ loop:
 	return nil
 }
 
-func i32sFrom(w *bytes.Buffer, d *dif.DIF) []int32 {
+func i32sFrom(w *bytes.Buffer, d *eformat.DIF) []int32 {
 	const i32sz = 4
 
 	w.Reset()
 	_, _ = w.Write(make([]byte, 6*i32sz))
-	err := dif.NewEncoder(w).Encode(d)
+	err := eformat.NewEncoder(w).Encode(d)
 	if err != nil {
 		panic(err)
 	}

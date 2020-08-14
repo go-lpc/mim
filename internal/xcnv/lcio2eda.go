@@ -12,13 +12,13 @@ import (
 	"reflect"
 	"unsafe"
 
-	"github.com/go-lpc/mim/dif"
+	"github.com/go-lpc/mim/internal/eformat"
 	"go-hep.org/x/hep/lcio"
 )
 
 func LCIO2EDA(w io.Writer, r *lcio.Reader, freq int, msg *log.Logger) error {
 	var (
-		enc = dif.NewEncoder(w)
+		enc = eformat.NewEncoder(w)
 		i   = 0
 	)
 
@@ -29,9 +29,9 @@ func LCIO2EDA(w io.Writer, r *lcio.Reader, freq int, msg *log.Logger) error {
 		evt := r.Event()
 		raw := evt.Get("RU_XDAQ").(*lcio.GenericObject).Data[0].I32s
 		buf := bytesFromI32s(raw[6:])
-		dec := dif.NewDecoder(buf[1], bytes.NewReader(buf))
+		dec := eformat.NewDecoder(buf[1], bytes.NewReader(buf))
 
-		var d dif.DIF
+		var d eformat.DIF
 		err := dec.Decode(&d)
 		if err != nil {
 			return fmt.Errorf("could not decode EDA: %w", err)

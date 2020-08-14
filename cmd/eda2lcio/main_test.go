@@ -11,7 +11,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/go-lpc/mim/dif"
+	"github.com/go-lpc/mim/internal/eformat"
 )
 
 func TestRunNbrFrom(t *testing.T) {
@@ -51,8 +51,8 @@ func TestEDA2LCIO(t *testing.T) {
 	}
 	defer os.RemoveAll(tmp)
 
-	refdif := dif.DIF{
-		Header: dif.GlobalHeader{
+	refdif := eformat.DIF{
+		Header: eformat.GlobalHeader{
 			ID:        0x42,
 			DTC:       10,
 			ATC:       11,
@@ -60,7 +60,7 @@ func TestEDA2LCIO(t *testing.T) {
 			AbsBCID:   0x0000112233445566,
 			TimeDIFTC: 0x00112233,
 		},
-		Frames: []dif.Frame{
+		Frames: []eformat.Frame{
 			{
 				Header: 1,
 				BCID:   0x001a1b1c,
@@ -84,7 +84,7 @@ func TestEDA2LCIO(t *testing.T) {
 	}
 	defer edaf.Close()
 
-	err = dif.NewEncoder(edaf).Encode(&refdif)
+	err = eformat.NewEncoder(edaf).Encode(&refdif)
 	if err != nil {
 		t.Fatalf("could not encode EDA: %+v", err)
 	}

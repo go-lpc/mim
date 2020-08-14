@@ -13,7 +13,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/go-lpc/mim/dif"
+	"github.com/go-lpc/mim/internal/eformat"
 )
 
 func TestDump(t *testing.T) {
@@ -26,14 +26,14 @@ func TestDump(t *testing.T) {
 	for _, tc := range []struct {
 		name string
 		eda  bool
-		data dif.DIF
+		data eformat.DIF
 		want string
 		err  error
 	}{
 		{
 			name: "simple-dif",
-			data: dif.DIF{
-				Header: dif.GlobalHeader{
+			data: eformat.DIF{
+				Header: eformat.GlobalHeader{
 					ID:        0x42,
 					DTC:       10,
 					ATC:       11,
@@ -41,7 +41,7 @@ func TestDump(t *testing.T) {
 					AbsBCID:   0x0000112233445566,
 					TimeDIFTC: 0x00112233,
 				},
-				Frames: []dif.Frame{
+				Frames: []eformat.Frame{
 					{
 						Header: 1,
 						BCID:   0x001a1b1c,
@@ -70,7 +70,7 @@ Frames:               2
 		},
 		{
 			name: "invalid-dif",
-			data: dif.DIF{},
+			data: eformat.DIF{},
 			want: string([]byte{0xb0, 0x42}),
 			err:  fmt.Errorf("could not decode DIF: dif: could not read DIF header: %w", io.ErrUnexpectedEOF),
 		},
@@ -85,7 +85,7 @@ Frames:               2
 
 			switch {
 			case tc.err == nil:
-				err = dif.NewEncoder(f).Encode(&tc.data)
+				err = eformat.NewEncoder(f).Encode(&tc.data)
 				if err != nil {
 					t.Fatalf("could not encode dif: %+v", err)
 				}

@@ -31,7 +31,7 @@ import (
 	"log"
 	"os"
 
-	"github.com/go-lpc/mim/dif"
+	"github.com/go-lpc/mim/internal/eformat"
 )
 
 func main() {
@@ -89,11 +89,11 @@ func process(w io.Writer, fname string, eda bool) error {
 	}
 	defer f.Close()
 
-	dec := dif.NewDecoder(difIDFrom(f), f)
+	dec := eformat.NewDecoder(difIDFrom(f), f)
 	dec.IsEDA = eda
 loop:
 	for {
-		var d dif.DIF
+		var d eformat.DIF
 		err := dec.Decode(&d)
 		if err != nil {
 			if errors.Is(err, io.EOF) {
