@@ -6,6 +6,7 @@ package eda
 
 import (
 	"bufio"
+	"bytes"
 	"encoding/binary"
 	"fmt"
 	"io"
@@ -16,6 +17,7 @@ import (
 	"time"
 
 	"github.com/go-lpc/mim/eda/internal/regs"
+	"github.com/go-lpc/mim/internal/eformat"
 	"github.com/go-lpc/mim/internal/mmap"
 	"golang.org/x/sys/unix"
 )
@@ -1816,6 +1818,10 @@ func (dev *Device) daqFIFOEmpty(rfm int) bool {
 // 	return nRAMUnits
 // }
 
+func difIDFrom(id uint32, rfm int) byte {
+	return difIDOffset + byte(id&7)<<3 + byte(rfm)&3
+}
+
 func (dev *Device) daqWriteDIFData(w io.Writer, rfm int) {
 	var (
 		wU8 = func(v uint8) {
@@ -1839,7 +1845,7 @@ func (dev *Device) daqWriteDIFData(w io.Writer, rfm int) {
 
 	// DIF DAQ header
 	wU8(0xB0)
-	wU8(difIDOffset + byte(dev.id&7)<<3 + byte(rfm)&3)
+	wU8(difIDFrom(dev.id, rfm))
 	// counters
 	wU32(dev.daq.cycleID[rfm])
 	wU32(dev.cntHit0(rfm))
@@ -1921,6 +1927,28 @@ func (dev *Device) daqSendDIFData(sck net.Conn, buf []byte) error {
 			)
 		}
 		_, _ = dev.daq.f.Write(dev.daq.w.p[:cur])
+		dec := eformat.NewDecoder(difIDFrom(dev.id, 0), bytes.NewReader(dev.daq.w.p[:cur]))
+		dec.IsEDA = true
+		var d eformat.DIF
+		err = dec.Decode(&d)
+		if err != nil {
+			dev.msg.Printf("could not decode DIF: %+v", err)
+		} else {
+			wbuf := dev.msg.Writer()
+			fmt.Fprintf(wbuf, "=== DIF-ID 0x%x ===\n", d.Header.ID)
+			fmt.Fprintf(wbuf, "DIF trigger: % 10d\n", d.Header.DTC)
+			fmt.Fprintf(wbuf, "ACQ trigger: % 10d\n", d.Header.ATC)
+			fmt.Fprintf(wbuf, "Gbl trigger: % 10d\n", d.Header.GTC)
+			fmt.Fprintf(wbuf, "Abs BCID:    % 10d\n", d.Header.AbsBCID)
+			fmt.Fprintf(wbuf, "Time DIF:    % 10d\n", d.Header.TimeDIFTC)
+			fmt.Fprintf(wbuf, "Frames:      % 10d\n", len(d.Frames))
+
+			for _, frame := range d.Frames {
+				fmt.Fprintf(wbuf, "  hroc=0x%02x BCID=% 8d %x\n",
+					frame.Header, frame.BCID, frame.Data,
+				)
+			}
+		}
 	}
 
 	// wait for ACK
