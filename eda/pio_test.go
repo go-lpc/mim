@@ -824,13 +824,17 @@ func TestDAQSendDIFData(t *testing.T) {
 				run: 42,
 				buf: make([]byte, 4),
 			}
-			dev.daq.w = &wbuf{
-				p: make([]byte, daqBufferSize),
-				c: 66,
-			}
 			sck := tc.conn()
-			dev.daq.sck = []net.Conn{sck}
-			err := dev.daqSendDIFData(sck, buf)
+			dev.daq.rfm = []rfmSink{
+				{
+					w: &wbuf{
+						p: make([]byte, daqBufferSize),
+						c: 66,
+					},
+					sck: sck,
+				},
+			}
+			err := dev.daqSendDIFData(0, buf)
 			switch {
 			case err == nil && tc.err == nil:
 				// ok.

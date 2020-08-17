@@ -76,8 +76,7 @@ func (srv *server) handle(conn net.Conn) error {
 
 	// FIXME(sbinet): use DIM hooks to configure those
 	dev.id = 1
-	//dev.rfms = []int{0, 1}
-	dev.rfms = []int{0}
+	dev.rfms = []int{0, 1}
 	dev.cfg.daq.delta = 180
 	dev.cfg.hr.rshaper = 3
 	dim, _, err := net.SplitHostPort(conn.RemoteAddr().String())
@@ -86,7 +85,7 @@ func (srv *server) handle(conn net.Conn) error {
 	}
 	//  dev.cfg.daq.addrs = make([]string, len(dev.rfms))
 	//	for i, rfm := range dev.rfms {
-	//		difid := difIDOffset + ((dev.id & 7) << 3) + (uint32(rfm) & 3)
+	//		difid := difIDFrom(dev.id, i)
 	//		dev.cfg.daq.addrs[i] = fmt.Sprintf("%s:%d", dim, 10000+difid)
 	//	}
 

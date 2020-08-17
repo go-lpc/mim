@@ -122,13 +122,17 @@ type Device struct {
 		cycleID      [nRFM]uint32
 		bcid48Offset uint32
 
-		w   *wbuf      // DIF data buffer
-		sck []net.Conn // DIF data sinks, one per RFM
+		rfm []rfmSink // DIF data sink, one per RFM
 
 		done chan int // signal to stop daq
 
 		f *os.File
 	}
+}
+
+type rfmSink struct {
+	w   *wbuf
+	sck net.Conn
 }
 
 type Option func(*Device)
@@ -319,7 +323,8 @@ func (dev *Device) Configure() error {
 
 func (dev *Device) Initialize() error {
 	if len(dev.cfg.daq.addrs) != 0 {
-		dev.daq.sck = make([]net.Conn, len(dev.rfms))
+		dev.daq.rfm = make([]rfmSink, len(dev.rfms))
+		dev.msg.Printf("initialize rfm sinks: %v", dev.rfms)
 		for i := range dev.rfms {
 			dev.serveRFM(i, dev.cfg.daq.addrs[i])
 		}
@@ -605,7 +610,7 @@ func (dev *Device) serveRFM(i int, addr string) {
 		dev.msg.Printf("could not connect to %q for rfm=%d: %+v", addr, rfm, err)
 		return
 	}
-	dev.daq.sck[i] = conn
+	dev.daq.rfm[i].sck = conn
 	dev.msg.Printf("dialing RFM(%d) to %q... [ok]", rfm, addr)
 }
 
@@ -622,17 +627,21 @@ func (dev *Device) loop() {
 		err   error
 	)
 
-	if len(dev.daq.sck) != 0 {
-		for _, sck := range dev.daq.sck {
-			if sck == nil {
+	if len(dev.daq.rfm) != 0 {
+		for i := range dev.daq.rfm {
+			rfm := &dev.daq.rfm[i]
+			if rfm.sck == nil {
 				continue
 			}
-			defer sck.Close()
+			defer rfm.sck.Close()
 		}
 	}
 
-	dev.daq.w = &wbuf{
-		p: make([]byte, daqBufferSize),
+	for i := range dev.daq.rfm {
+		rfm := &dev.daq.rfm[i]
+		rfm.w = &wbuf{
+			p: make([]byte, daqBufferSize),
+		}
 	}
 
 	dev.daq.f, err = os.Create("/dev/shm/out.raw")
@@ -667,8 +676,8 @@ func (dev *Device) loop() {
 		printf(w, "cp-") // copy
 
 		// read hardroc data
-		for _, rfm := range dev.rfms {
-			dev.daqWriteDIFData(dev.daq.w, rfm)
+		for i, rfm := range dev.rfms {
+			dev.daqWriteDIFData(dev.daq.rfm[i].w, rfm)
 		}
 		err = dev.syncAckFIFO()
 		if err != nil {
@@ -677,11 +686,10 @@ func (dev *Device) loop() {
 		}
 		printf(w, "tx-")
 		var grp errgroup.Group
-		for i := range dev.daq.sck {
+		for i := range dev.daq.rfm {
 			ii := i
-			sck := dev.daq.sck[ii]
 			grp.Go(func() error {
-				err := dev.daqSendDIFData(sck, buf)
+				err := dev.daqSendDIFData(ii, buf)
 				if err != nil {
 					errorf("eda: could not send DIF data (RFM=%d): %w", dev.rfms[ii], err)
 					return err

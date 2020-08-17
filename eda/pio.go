@@ -10,7 +10,6 @@ import (
 	"encoding/binary"
 	"fmt"
 	"io"
-	"net"
 	"os"
 	"strconv"
 	"strings"
@@ -1894,9 +1893,14 @@ func (dev *Device) daqWriteDIFData(w io.Writer, rfm int) {
 	dev.daq.cycleID[rfm]++
 }
 
-func (dev *Device) daqSendDIFData(sck net.Conn, buf []byte) error {
+func (dev *Device) daqSendDIFData(i int, buf []byte) error {
+	var (
+		sink = &dev.daq.rfm[i]
+		w    = sink.w
+		sck  = sink.sck
+	)
 	defer func() {
-		dev.daq.w.c = 0
+		w.c = 0
 	}()
 
 	errorf := func(format string, args ...interface{}) error {
@@ -1906,7 +1910,7 @@ func (dev *Device) daqSendDIFData(sck net.Conn, buf []byte) error {
 	}
 
 	hdr := buf[:8]
-	cur := dev.daq.w.c
+	cur := w.c
 	copy(hdr, "HDR\x00")
 	binary.LittleEndian.PutUint32(hdr[4:], uint32(cur))
 
@@ -1919,15 +1923,15 @@ func (dev *Device) daqSendDIFData(sck net.Conn, buf []byte) error {
 	}
 
 	if cur > 0 {
-		_, err = sck.Write(dev.daq.w.p[:cur])
+		_, err = sck.Write(w.p[:cur])
 		if err != nil {
 			return errorf(
 				"eda: could not send DIF data to %v: %w",
 				sck.RemoteAddr(), err,
 			)
 		}
-		_, _ = dev.daq.f.Write(dev.daq.w.p[:cur])
-		dec := eformat.NewDecoder(difIDFrom(dev.id, 0), bytes.NewReader(dev.daq.w.p[:cur]))
+		_, _ = dev.daq.f.Write(w.p[:cur])
+		dec := eformat.NewDecoder(difIDFrom(dev.id, dev.rfms[i]), bytes.NewReader(w.p[:cur]))
 		dec.IsEDA = true
 		var d eformat.DIF
 		err = dec.Decode(&d)
