@@ -1846,9 +1846,10 @@ func (dev *Device) daqWriteDIFData(w io.Writer, rfm int) {
 	wU8(0xB0)
 	wU8(difIDFrom(dev.id, rfm))
 	// counters
-	wU32(dev.daq.cycleID[rfm])
+	wU32(dev.daq.cycleID[rfm] + 1) // FIXME(sbinet): off-by-one ?
 	wU32(dev.cntHit0(rfm))
-	wU32(dev.cntHit1(rfm))
+	//wU32(dev.cntHit1(rfm)) // FIXME(sbinet): hack
+	wU32(dev.daq.cycleID[rfm] + 1) // FIXME(sbinet): hack (and off-by-one?)
 	// assemble and correct absolute BCID
 	bcid48 := uint64(dev.cntBCID48MSB())
 	bcid48 <<= 32
