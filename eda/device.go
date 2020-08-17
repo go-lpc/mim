@@ -125,8 +125,7 @@ type Device struct {
 		w   *wbuf      // DIF data buffer
 		sck []net.Conn // DIF data sinks, one per RFM
 
-		bcid chan uint32 // signal BCID reset
-		done chan int    // signal to stop daq
+		done chan int // signal to stop daq
 
 		f *os.File
 	}
@@ -336,16 +335,6 @@ func (dev *Device) Initialize() error {
 		return fmt.Errorf("eda: could not initialize HardRoc: %w", err)
 	}
 
-	dev.daq.bcid = make(chan uint32)
-	go func() {
-		var dccCmd uint32 = 0xe
-		dev.msg.Printf("launching reset-BCID goroutine...")
-		for dccCmd != regs.CMD_RESET_BCID {
-			dccCmd = dev.syncDCCCmdMem()
-		}
-		dev.msg.Printf("launching reset-BCID goroutine... [done: v=0x%x]", dccCmd)
-		dev.daq.bcid <- dccCmd
-	}()
 	return nil
 }
 
@@ -493,6 +482,17 @@ func (dev *Device) initHR() error {
 }
 
 func (dev *Device) Start() error {
+	resetBCID := make(chan uint32)
+	go func() {
+		var dccCmd uint32 = 0xe
+		dev.msg.Printf("launching reset-BCID goroutine...")
+		for dccCmd != regs.CMD_RESET_BCID {
+			dccCmd = dev.syncDCCCmdMem()
+		}
+		dev.msg.Printf("launching reset-BCID goroutine... [done: v=0x%x]", dccCmd)
+		resetBCID <- dccCmd
+	}()
+
 	err := dev.initRun()
 	if err != nil {
 		return fmt.Errorf("eda: could not init run: %w", err)
@@ -504,7 +504,7 @@ func (dev *Device) Start() error {
 	select {
 	case <-timer.C:
 		dev.msg.Printf("waiting for reset-BCID... [timeout]")
-	case v := <-dev.daq.bcid:
+	case v := <-resetBCID:
 		dev.msg.Printf("waiting for reset-BCID... [ok=0x%x]", v)
 	}
 
