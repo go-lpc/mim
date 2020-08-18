@@ -414,7 +414,7 @@ func (dev *Device) initHR() error {
 
 	// set chip IDs
 	for hr := uint32(0); hr < nHR; hr++ {
-		dev.hrscSetChipID(hr, hr)
+		dev.hrscSetChipID(hr, hr+1)
 	}
 
 	// for each active RFM, tune the configuration and send it.
