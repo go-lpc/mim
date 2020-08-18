@@ -9,6 +9,7 @@ import (
 	"bytes"
 	"crypto/tls"
 	"encoding/json"
+	"errors"
 	"flag"
 	"fmt"
 	"io"
@@ -102,7 +103,9 @@ func (srv *server) handle(conn net.Conn, name string) {
 			err = json.NewDecoder(conn).Decode(&req)
 		)
 		if err != nil {
-			log.Printf("could not decode command: %+v", err)
+			if !errors.Is(err, io.EOF) {
+				log.Printf("could not decode command: %+v", err)
+			}
 			return
 		}
 		switch req.Name {
@@ -112,6 +115,7 @@ func (srv *server) handle(conn net.Conn, name string) {
 
 			log.Printf("starting command... %s %v", name, req.Args)
 			srv.cmd = exec.Command(name, req.Args...)
+			srv.cmd.Stderr = os.Stderr
 			srv.cmd.Stdout = os.Stdout
 			err = srv.cmd.Start()
 			if err != nil {
