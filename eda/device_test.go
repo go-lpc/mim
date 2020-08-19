@@ -261,13 +261,14 @@ func TestRun(t *testing.T) {
 				0: regs.O_PLL_LCK | tc.done, // stop trigger
 			}...)
 
-			wrap(dev, &dev.regs.pio.ctrl, "pio.ctrl", fakeCtrl)
-			wrap(dev, &dev.regs.pio.state, "pio.state", fakeState)
-			wrap(dev, &dev.regs.pio.chkSC[tc.rfm], "pio.chk-sc", fakeChkSC)
-			wrap(dev, &dev.regs.pio.cnt24, "pio.cnt24", fakeCnt24)
+			var mu sync.RWMutex
+			wrap(dev, &mu, &dev.regs.pio.ctrl, "pio.ctrl", fakeCtrl)
+			wrap(dev, &mu, &dev.regs.pio.state, "pio.state", fakeState)
+			wrap(dev, &mu, &dev.regs.pio.chkSC[tc.rfm], "pio.chk-sc", fakeChkSC)
+			wrap(dev, &mu, &dev.regs.pio.cnt24, "pio.cnt24", fakeCnt24)
 
 			wrap(
-				dev,
+				dev, &mu,
 				&dev.regs.fifo.daqCSR[tc.rfm].pins[regs.ALTERA_AVALON_FIFO_STATUS_REG],
 				"fifo.daq-csr[rfm]",
 				fakeDaqCSR,
@@ -332,77 +333,78 @@ func TestDumpRegisters(t *testing.T) {
 	}
 	defer dev.Close()
 
-	wrap(dev, &dev.regs.pio.state, "pio.state", []uint32{
+	var mu sync.RWMutex
+	wrap(dev, &mu, &dev.regs.pio.state, "pio.state", []uint32{
 		0x1,
 		0x8 << regs.SHIFT_CMD_CODE_MEM,
 	})
 
-	wrap(dev, &dev.regs.pio.ctrl, "pio.ctrl", []uint32{
+	wrap(dev, &mu, &dev.regs.pio.ctrl, "pio.ctrl", []uint32{
 		0x2,
 		0x2,
 	})
 
-	wrap(dev, &dev.regs.pio.pulser, "pio.pulser", []uint32{
+	wrap(dev, &mu, &dev.regs.pio.pulser, "pio.pulser", []uint32{
 		0x3,
 	})
 
-	wrap(dev, &dev.regs.pio.cntHit0[0], "pio.cntHit0[0]", []uint32{
+	wrap(dev, &mu, &dev.regs.pio.cntHit0[0], "pio.cntHit0[0]", []uint32{
 		0x4,
 	})
 
-	wrap(dev, &dev.regs.pio.cntHit0[1], "pio.cntHit0[1]", []uint32{
+	wrap(dev, &mu, &dev.regs.pio.cntHit0[1], "pio.cntHit0[1]", []uint32{
 		0x5,
 	})
 
-	wrap(dev, &dev.regs.pio.cntHit0[2], "pio.cntHit0[2]", []uint32{
+	wrap(dev, &mu, &dev.regs.pio.cntHit0[2], "pio.cntHit0[2]", []uint32{
 		0x6,
 	})
 
-	wrap(dev, &dev.regs.pio.cntHit0[3], "pio.cntHit0[3]", []uint32{
+	wrap(dev, &mu, &dev.regs.pio.cntHit0[3], "pio.cntHit0[3]", []uint32{
 		0x7,
 	})
 
-	wrap(dev, &dev.regs.pio.cntHit1[0], "pio.cntHit0[0]", []uint32{
+	wrap(dev, &mu, &dev.regs.pio.cntHit1[0], "pio.cntHit0[0]", []uint32{
 		0x8,
 	})
 
-	wrap(dev, &dev.regs.pio.cntHit1[1], "pio.cntHit1[1]", []uint32{
+	wrap(dev, &mu, &dev.regs.pio.cntHit1[1], "pio.cntHit1[1]", []uint32{
 		0x9,
 	})
 
-	wrap(dev, &dev.regs.pio.cntHit1[2], "pio.cntHit1[2]", []uint32{
+	wrap(dev, &mu, &dev.regs.pio.cntHit1[2], "pio.cntHit1[2]", []uint32{
 		0x10,
 	})
 
-	wrap(dev, &dev.regs.pio.cntHit1[3], "pio.cntHit1[3]", []uint32{
+	wrap(dev, &mu, &dev.regs.pio.cntHit1[3], "pio.cntHit1[3]", []uint32{
 		0x11,
 	})
 
-	wrap(dev, &dev.regs.pio.cntTrig, "pio.cntTrig", []uint32{
+	wrap(dev, &mu, &dev.regs.pio.cntTrig, "pio.cntTrig", []uint32{
 		0x12,
 	})
 
-	wrap(dev, &dev.regs.pio.cnt48MSB, "pio.cnt48MSB", []uint32{
+	wrap(dev, &mu, &dev.regs.pio.cnt48MSB, "pio.cnt48MSB", []uint32{
 		0x13,
 	})
 
-	wrap(dev, &dev.regs.pio.cnt48LSB, "pio.cnt48LSB", []uint32{
+	wrap(dev, &mu, &dev.regs.pio.cnt48LSB, "pio.cnt48LSB", []uint32{
 		0x14,
 	})
 
-	wrap(dev, &dev.regs.fifo.daqCSR[0].pins[0], "fifo.daqCSR[0]", []uint32{
+	wrap(dev, &mu, &dev.regs.fifo.daqCSR[0].pins[0], "fifo.daqCSR[0]", []uint32{
 		0x15,
 	})
 
-	wrap(dev, &dev.regs.fifo.daqCSR[1].pins[0], "fifo.daqCSR[1]", []uint32{
+	wrap(dev, &mu, &dev.regs.fifo.daqCSR[1].pins[0], "fifo.daqCSR[1]", []uint32{
 		0x16,
 	})
 
-	wrap(dev, &dev.regs.fifo.daqCSR[2].pins[0], "fifo.daqCSR[2]", []uint32{
+	wrap(dev, &mu, &dev.regs.fifo.daqCSR[2].pins[0], "fifo.daqCSR[2]", []uint32{
 		0x17,
 	})
 
-	wrap(dev, &dev.regs.fifo.daqCSR[3].pins[0], "fifo.daqCSR[3]", []uint32{
+	wrap(dev, &mu, &dev.regs.fifo.daqCSR[3].pins[0], "fifo.daqCSR[3]", []uint32{
 		0x18,
 	})
 
@@ -476,27 +478,29 @@ func TestDumpFIFOStatus(t *testing.T) {
 
 			dev.rfms = []int{rfmID}
 
-			wrap(dev, &dev.regs.fifo.daqCSR[rfmID].pins[regs.ALTERA_AVALON_FIFO_LEVEL_REG], "fifo-level", []uint32{
+			var mu sync.RWMutex
+
+			wrap(dev, &mu, &dev.regs.fifo.daqCSR[rfmID].pins[regs.ALTERA_AVALON_FIFO_LEVEL_REG], "fifo-level", []uint32{
 				0x1,
 			})
 
-			wrap(dev, &dev.regs.fifo.daqCSR[rfmID].pins[regs.ALTERA_AVALON_FIFO_STATUS_REG], "fifo-status", []uint32{
+			wrap(dev, &mu, &dev.regs.fifo.daqCSR[rfmID].pins[regs.ALTERA_AVALON_FIFO_STATUS_REG], "fifo-status", []uint32{
 				0xffffff,
 			})
 
-			wrap(dev, &dev.regs.fifo.daqCSR[rfmID].pins[regs.ALTERA_AVALON_FIFO_EVENT_REG], "fifo-event", []uint32{
+			wrap(dev, &mu, &dev.regs.fifo.daqCSR[rfmID].pins[regs.ALTERA_AVALON_FIFO_EVENT_REG], "fifo-event", []uint32{
 				0xffffff,
 			})
 
-			wrap(dev, &dev.regs.fifo.daqCSR[rfmID].pins[regs.ALTERA_AVALON_FIFO_IENABLE_REG], "fifo-ienable", []uint32{
+			wrap(dev, &mu, &dev.regs.fifo.daqCSR[rfmID].pins[regs.ALTERA_AVALON_FIFO_IENABLE_REG], "fifo-ienable", []uint32{
 				0xffffff,
 			})
 
-			wrap(dev, &dev.regs.fifo.daqCSR[rfmID].pins[regs.ALTERA_AVALON_FIFO_ALMOSTFULL_REG], "fifo-almost-full", []uint32{
+			wrap(dev, &mu, &dev.regs.fifo.daqCSR[rfmID].pins[regs.ALTERA_AVALON_FIFO_ALMOSTFULL_REG], "fifo-almost-full", []uint32{
 				128,
 			})
 
-			wrap(dev, &dev.regs.fifo.daqCSR[rfmID].pins[regs.ALTERA_AVALON_FIFO_ALMOSTEMPTY_REG], "fifo-almost-empty", []uint32{
+			wrap(dev, &mu, &dev.regs.fifo.daqCSR[rfmID].pins[regs.ALTERA_AVALON_FIFO_ALMOSTEMPTY_REG], "fifo-almost-empty", []uint32{
 				255,
 			})
 
@@ -653,7 +657,7 @@ func TestNewDevice(t *testing.T) {
 
 type fakeReg32 struct {
 	name string
-	mu   sync.RWMutex
+	mu   *sync.RWMutex
 	cr   int
 	cw   int
 
@@ -662,10 +666,11 @@ type fakeReg32 struct {
 
 const dbg = false
 
-func wrap(dev *Device, reg *reg32, name string, rs []uint32) *fakeReg32 {
+func wrap(dev *Device, mu *sync.RWMutex, reg *reg32, name string, rs []uint32) *fakeReg32 {
 	var (
 		mon = fakeReg32{
 			name: name,
+			mu:   mu,
 			rs:   rs,
 		}
 		r = reg.r
