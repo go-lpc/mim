@@ -1932,7 +1932,7 @@ func (dev *Device) daqSendDIFData(i int, buf []byte) error {
 			)
 		}
 		_, _ = dev.daq.f.Write(w.p[:cur])
-		dec := eformat.NewDecoder(difIDFrom(dev.id, dev.rfms[i]), bytes.NewReader(w.p[:cur]))
+		dec := eformat.NewDecoder(difIDFrom(dev.id, sink.id), bytes.NewReader(w.p[:cur]))
 		dec.IsEDA = true
 		var d eformat.DIF
 		err = dec.Decode(&d)
