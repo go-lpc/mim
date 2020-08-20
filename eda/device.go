@@ -131,6 +131,7 @@ type Device struct {
 }
 
 type rfmSink struct {
+	id  int // RFM slot
 	w   *wbuf
 	sck net.Conn
 }
@@ -610,6 +611,7 @@ func (dev *Device) serveRFM(i int, addr string) {
 		dev.msg.Printf("could not connect to %q for rfm=%d: %+v", addr, rfm, err)
 		return
 	}
+	dev.daq.rfm[i].id = rfm
 	dev.daq.rfm[i].sck = conn
 	dev.msg.Printf("dialing RFM(%d) to %q... [ok]", rfm, addr)
 }
