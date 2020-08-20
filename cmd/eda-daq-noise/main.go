@@ -15,7 +15,7 @@ import (
 
 func main() {
 	var (
-		cfg    = flag.String("cfg-file", "", "path to configuration file")
+		cfg    = flag.String("cfg-file", "/dev/shm/config_base", "path to configuration file")
 		run    = flag.Int("run", 0, "run number to use for data acquisition")
 		rfm    = flag.Int("rfm-mask", 0, "RFM mask")
 		thresh = flag.Int("thresh", 0, "DAC threshold")
