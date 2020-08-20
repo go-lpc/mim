@@ -565,16 +565,16 @@ func (dev *Device) syncState() uint32 {
 	return (state >> regs.SHIFT_SYNCHRO_STATE) & 0xF
 }
 
-// func (dev *Device) syncSelectCmdSoft() error {
-// 	ctrl := dev.regs.pio.ctrl.r()
-// 	ctrl |= regs.O_SEL_CMD_SOURCE
-// 	dev.regs.pio.ctrl.w(ctrl)
-//
-// 	if dev.err != nil {
-// 		return fmt.Errorf("eda: could not synchronize cmd-soft: %w", dev.err)
-// 	}
-// 	return nil
-// }
+func (dev *Device) syncSelectCmdSoft() error {
+	ctrl := dev.regs.pio.ctrl.r()
+	ctrl |= regs.O_SEL_CMD_SOURCE
+	dev.regs.pio.ctrl.w(ctrl)
+
+	if dev.err != nil {
+		return fmt.Errorf("eda: could not synchronize cmd-soft: %w", dev.err)
+	}
+	return nil
+}
 
 func (dev *Device) syncSelectCmdDCC() error {
 	ctrl := dev.regs.pio.ctrl.r()
@@ -587,40 +587,40 @@ func (dev *Device) syncSelectCmdDCC() error {
 	return nil
 }
 
-// func (dev *Device) syncSetCmd(cmd uint32) error {
-// 	ctrl := dev.regs.pio.ctrl.r()
-// 	ctrl &= ^uint32(0xf << regs.SHIFT_CMD_CODE) // reset 4 bits
-// 	ctrl |= (0xf & cmd) << regs.SHIFT_CMD_CODE  // set command
-//
-// 	dev.regs.pio.ctrl.w(ctrl)
-// 	time.Sleep(2 * time.Microsecond)
-//
-// 	ctrl &= ^uint32(0xf << regs.SHIFT_CMD_CODE)  // reset 4 bits
-// 	ctrl |= regs.CMD_IDLE << regs.SHIFT_CMD_CODE // set idle command
-// 	dev.regs.pio.ctrl.w(ctrl)
-//
-// 	if dev.err != nil {
-// 		return fmt.Errorf("eda: could not set command 0x%x: %w", cmd, dev.err)
-// 	}
-// 	return nil
-// }
-//
-// func (dev *Device) syncResetBCID() error {
-// 	return dev.syncSetCmd(regs.CMD_RESET_BCID)
-// }
-//
-// func (dev *Device) syncStart() error {
-// 	return dev.syncSetCmd(regs.CMD_START_ACQ)
-// }
-//
-// func (dev *Device) syncStop() error {
-// 	return dev.syncSetCmd(regs.CMD_STOP_ACQ)
-// }
-//
-// func (dev *Device) syncRAMFullExt() error {
-// 	return dev.syncSetCmd(regs.CMD_RAMFULL_EXT)
-// }
-//
+func (dev *Device) syncSetCmd(cmd uint32) error {
+	ctrl := dev.regs.pio.ctrl.r()
+	ctrl &= ^uint32(0xf << regs.SHIFT_CMD_CODE) // reset 4 bits
+	ctrl |= (0xf & cmd) << regs.SHIFT_CMD_CODE  // set command
+
+	dev.regs.pio.ctrl.w(ctrl)
+	time.Sleep(2 * time.Microsecond)
+
+	ctrl &= ^uint32(0xf << regs.SHIFT_CMD_CODE)  // reset 4 bits
+	ctrl |= regs.CMD_IDLE << regs.SHIFT_CMD_CODE // set idle command
+	dev.regs.pio.ctrl.w(ctrl)
+
+	if dev.err != nil {
+		return fmt.Errorf("eda: could not set command 0x%x: %w", cmd, dev.err)
+	}
+	return nil
+}
+
+func (dev *Device) syncResetBCID() error {
+	return dev.syncSetCmd(regs.CMD_RESET_BCID)
+}
+
+func (dev *Device) syncStart() error {
+	return dev.syncSetCmd(regs.CMD_START_ACQ)
+}
+
+func (dev *Device) syncStop() error {
+	return dev.syncSetCmd(regs.CMD_STOP_ACQ)
+}
+
+func (dev *Device) syncRAMFullExt() error {
+	return dev.syncSetCmd(regs.CMD_RAMFULL_EXT)
+}
+
 // func (dev *Device) syncDigitalRO() error {
 // 	return dev.syncSetCmd(regs.CMD_DIGITAL_RO)
 // }

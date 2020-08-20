@@ -193,7 +193,7 @@ func WithConfigDir(dir string) Option {
 	}
 }
 
-func newDevice(devmem, odir, devshm, cfgdir string) (*Device, error) {
+func newDevice(devmem, odir, devshm, cfgdir string, opts ...Option) (*Device, error) {
 	mem, err := os.OpenFile(devmem, os.O_RDWR|os.O_SYNC, 0666)
 	if err != nil {
 		return nil, fmt.Errorf("eda: could not open %q: %w", devmem, err)
@@ -217,6 +217,10 @@ func newDevice(devmem, odir, devshm, cfgdir string) (*Device, error) {
 	WithDevSHM(devshm)(dev)
 
 	dev.cfg.hr.data = dev.cfg.hr.buf[4:]
+
+	for _, opt := range opts {
+		opt(dev)
+	}
 
 	// setup RFMs indices from provided mask
 	dev.rfms = nil
