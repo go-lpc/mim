@@ -885,6 +885,9 @@ func (dev *Device) DumpConfig(w io.Writer, rfm int) error {
 }
 
 func (dev *Device) DumpRegisters(w io.Writer) error {
+	const (
+		lvl = regs.ALTERA_AVALON_FIFO_LEVEL_REG
+	)
 	regs := &dev.regs
 
 	fmt.Fprintf(w, "pio.state=       0x%08x\n", regs.pio.state.r())
@@ -905,10 +908,10 @@ func (dev *Device) DumpRegisters(w io.Writer) error {
 	fmt.Fprintf(w, "pio.cnt48MSB=    0x%08x\n", regs.pio.cnt48MSB.r())
 	fmt.Fprintf(w, "pio.cnt48LSB=    0x%08x\n", regs.pio.cnt48LSB.r())
 
-	fmt.Fprintf(w, "fifo.daqCSR[0]=  0x%08x\n", regs.fifo.daqCSR[0].r(0))
-	fmt.Fprintf(w, "fifo.daqCSR[1]=  0x%08x\n", regs.fifo.daqCSR[1].r(0))
-	fmt.Fprintf(w, "fifo.daqCSR[2]=  0x%08x\n", regs.fifo.daqCSR[2].r(0))
-	fmt.Fprintf(w, "fifo.daqCSR[3]=  0x%08x\n", regs.fifo.daqCSR[3].r(0))
+	fmt.Fprintf(w, "fifo.daqCSR[0]=  0x%08x\n", regs.fifo.daqCSR[0].r(lvl))
+	fmt.Fprintf(w, "fifo.daqCSR[1]=  0x%08x\n", regs.fifo.daqCSR[1].r(lvl))
+	fmt.Fprintf(w, "fifo.daqCSR[2]=  0x%08x\n", regs.fifo.daqCSR[2].r(lvl))
+	fmt.Fprintf(w, "fifo.daqCSR[3]=  0x%08x\n", regs.fifo.daqCSR[3].r(lvl))
 
 	names := [...]string{
 		0: "idle",
