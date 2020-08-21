@@ -1688,16 +1688,16 @@ func (dev *Device) daqFIFOInit(rfm int) error {
 // 	reg := dev.regs.fifo.daqCSR[rfm].r(regs.ALTERA_AVALON_FIFO_STATUS_REG)
 // 	return bit32(reg, 0) != 0
 // }
+//
+// func (dev *Device) daqFIFOEmpty(rfm int) bool {
+// 	reg := dev.regs.fifo.daqCSR[rfm].r(regs.ALTERA_AVALON_FIFO_STATUS_REG)
+// 	return bit32(reg, 1) != 0
+// }
 
-func (dev *Device) daqFIFOEmpty(rfm int) bool {
-	reg := dev.regs.fifo.daqCSR[rfm].r(regs.ALTERA_AVALON_FIFO_STATUS_REG)
-	return bit32(reg, 1) == 0
+func (dev *Device) daqFIFOFillLevel(rfm int) uint32 {
+	return dev.regs.fifo.daqCSR[rfm].r(regs.ALTERA_AVALON_FIFO_LEVEL_REG)
 }
 
-// func (dev *Device) daqFIFOFillLevel(rfm int) uint32 {
-// 	return dev.regs.fifo.daqCSR[rfm].r(regs.ALTERA_AVALON_FIFO_LEVEL_REG)
-// }
-//
 // func (dev *Device) daqFIFOData(rfm int) uint32 {
 // 	return dev.regs.fifo.daqCSR[rfm].r(regs.ALTERA_AVALON_FIFO_DATA_REG)
 // }
@@ -1870,7 +1870,11 @@ func (dev *Device) daqWriteDIFData(w io.Writer, rfm int) {
 		hrID   int
 	)
 	wU8(0xB4) // HR header
-	for !dev.daqFIFOEmpty(rfm) {
+
+	const nWordsPerHR = 5
+	n := int(dev.daqFIFOFillLevel(rfm) / nWordsPerHR)
+
+	for i := 0; i < n; i++ {
 		// read HR ID
 		id := dev.regs.fifo.daq[rfm].r()
 		hrID = int(id >> 24)
@@ -1882,9 +1886,10 @@ func (dev *Device) daqWriteDIFData(w io.Writer, rfm int) {
 			}
 		}
 		wU32(id)
-		for i := 0; i < 4; i++ {
-			wU32(dev.regs.fifo.daq[rfm].r())
-		}
+		wU32(dev.regs.fifo.daq[rfm].r())
+		wU32(dev.regs.fifo.daq[rfm].r())
+		wU32(dev.regs.fifo.daq[rfm].r())
+		wU32(dev.regs.fifo.daq[rfm].r())
 		lastHR = hrID
 	}
 	wU8(0xA3)    // last HR trailer
