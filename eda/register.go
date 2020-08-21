@@ -65,14 +65,15 @@ type daqFIFO struct {
 }
 
 func newDAQFIFO(dev *Device, rw rwer, offset int64) daqFIFO {
+	const sz = 4 // sizeof(uint32)
 	return daqFIFO{
 		pins: [6]reg32{
-			newReg32(dev, rw, offset+regs.ALTERA_AVALON_FIFO_LEVEL_REG),
-			newReg32(dev, rw, offset+regs.ALTERA_AVALON_FIFO_STATUS_REG),
-			newReg32(dev, rw, offset+regs.ALTERA_AVALON_FIFO_EVENT_REG),
-			newReg32(dev, rw, offset+regs.ALTERA_AVALON_FIFO_IENABLE_REG),
-			newReg32(dev, rw, offset+regs.ALTERA_AVALON_FIFO_ALMOSTFULL_REG),
-			newReg32(dev, rw, offset+regs.ALTERA_AVALON_FIFO_ALMOSTEMPTY_REG),
+			newReg32(dev, rw, offset+sz*regs.ALTERA_AVALON_FIFO_LEVEL_REG),
+			newReg32(dev, rw, offset+sz*regs.ALTERA_AVALON_FIFO_STATUS_REG),
+			newReg32(dev, rw, offset+sz*regs.ALTERA_AVALON_FIFO_EVENT_REG),
+			newReg32(dev, rw, offset+sz*regs.ALTERA_AVALON_FIFO_IENABLE_REG),
+			newReg32(dev, rw, offset+sz*regs.ALTERA_AVALON_FIFO_ALMOSTFULL_REG),
+			newReg32(dev, rw, offset+sz*regs.ALTERA_AVALON_FIFO_ALMOSTEMPTY_REG),
 		},
 	}
 }
