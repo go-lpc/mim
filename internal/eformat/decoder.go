@@ -80,7 +80,7 @@ func (dec *Decoder) Decode(dif *DIF) error {
 	dec.crcw(hdr)
 
 	difID := hdr[0]
-	if difID != dec.dif {
+	if dec.dif != 0 && difID != dec.dif {
 		return fmt.Errorf("dif: invalid DIF ID (got=0x%x, want=0x%x)", difID, dec.dif)
 	}
 
