@@ -19,6 +19,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -138,7 +139,7 @@ func (srv *server) handle(conn net.Conn, name string) {
 			log.Printf("starting command... [done]")
 
 			run := req.Args[4]
-			go srv.monitor(run, done)
+			go srv.monitor(name, run, done)
 
 		case "stop":
 			log.Printf("stopping command...")
@@ -214,7 +215,10 @@ func (srv *server) waitReady(ready chan error) {
 	}
 }
 
-func (srv *server) monitor(run string, quit chan int) {
+func (srv *server) monitor(name, run string, quit chan int) {
+	log.Printf("starting to monitor [%s] for client=%q...", run, name)
+	defer log.Printf("starting to monitor [%s] for client=%q... [done]", run, name)
+
 	var (
 		tick  = time.NewTicker(srv.freq)
 		table = make(map[string]int64)
@@ -227,6 +231,7 @@ func (srv *server) monitor(run string, quit chan int) {
 		case <-quit:
 			return
 		case <-tick.C:
+			log.Printf("[mon]: listing contents of %q for client=%q...", run, name)
 			cur, err := srv.list(srv.dir, run)
 			if err != nil {
 				log.Printf("could not list files: %+v", err)
@@ -234,6 +239,15 @@ func (srv *server) monitor(run string, quit chan int) {
 			}
 			srv.compare(table, cur)
 			table = cur
+			keys := make([]string, 0, len(table))
+			for k := range table {
+				keys = append(keys, k)
+			}
+			sort.Strings(keys)
+			for _, k := range keys {
+				log.Printf("[mon]: %q: %d", k, table[k])
+			}
+			log.Printf("[mon]: listing contents of %q for client=%q... [done]", run, name)
 		}
 	}
 }
