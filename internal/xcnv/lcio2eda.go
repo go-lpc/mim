@@ -30,6 +30,7 @@ func LCIO2EDA(w io.Writer, r *lcio.Reader, freq int, msg *log.Logger) error {
 		raw := evt.Get("RU_XDAQ").(*lcio.GenericObject).Data[0].I32s
 		buf := bytesFromI32s(raw[6:])
 		dec := eformat.NewDecoder(buf[1], bytes.NewReader(buf))
+		dec.IsEDA = true
 
 		var d eformat.DIF
 		err := dec.Decode(&d)
