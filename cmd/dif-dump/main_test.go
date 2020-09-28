@@ -17,6 +17,53 @@ import (
 )
 
 func TestDump(t *testing.T) {
+	tmpdir, err := ioutil.TempDir("", "dif-dump-")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(tmpdir)
+
+	f, err := os.Create(filepath.Join(tmpdir, "dif.raw"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer f.Close()
+
+	err = eformat.NewEncoder(f).Encode(&eformat.DIF{
+		Header: eformat.GlobalHeader{
+			ID:        0x42,
+			DTC:       10,
+			ATC:       11,
+			GTC:       12,
+			AbsBCID:   0x0000112233445566,
+			TimeDIFTC: 0x00112233,
+		},
+		Frames: []eformat.Frame{
+			{
+				Header: 1,
+				BCID:   0x001a1b1c,
+				Data:   [16]uint8{0xa, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15},
+			},
+			{
+				Header: 2,
+				BCID:   0x002a2b2c,
+				Data: [16]uint8{
+					0xb, 21, 22, 23, 24, 25, 26, 27, 28, 29,
+					210, 211, 212, 213, 214, 215,
+				},
+			},
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	_ = f.Close()
+
+	xmain(ioutil.Discard, []string{"-eda", f.Name()})
+}
+
+func TestProcess(t *testing.T) {
 	tmp, err := ioutil.TempDir("", "mim-dif-dump-")
 	if err != nil {
 		t.Fatalf("could not create tmp dir: %+v", err)

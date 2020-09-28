@@ -34,14 +34,7 @@ import (
 	"github.com/go-lpc/mim/internal/eformat"
 )
 
-func main() {
-	log.SetPrefix("dif-dump: ")
-	log.SetFlags(0)
-
-	eda := flag.Bool("eda", false, "enable EDA hack")
-
-	flag.Usage = func() {
-		fmt.Printf(`dif-dump decodes and displays DIF data files.
+const usage = `dif-dump decodes and displays DIF data files.
 
 Usage: dif-dump [OPTIONS] FILE1 [FILE2 [FILE3 ...]]
 
@@ -60,19 +53,39 @@ Example:
    hroc=0x01 BCID= 1520655 00000010000000000000000000000000
  [...]
 
-`)
-		flag.PrintDefaults()
+`
+
+func main() {
+	xmain(os.Stdout, os.Args[1:])
+}
+
+func xmain(w io.Writer, args []string) {
+	log.SetPrefix("dif-dump: ")
+	log.SetFlags(0)
+
+	var (
+		fset = flag.NewFlagSet("dif", flag.ExitOnError)
+
+		eda = fset.Bool("eda", false, "enable EDA hack")
+	)
+
+	fset.Usage = func() {
+		fmt.Print(usage)
+		fset.PrintDefaults()
 	}
 
-	flag.Parse()
+	err := fset.Parse(args)
+	if err != nil {
+		log.Fatalf("could not parse input arguments: %+v", err)
+	}
 
-	if flag.NArg() == 0 {
-		flag.Usage()
+	if fset.NArg() == 0 {
+		fset.Usage()
 		log.Fatalf("missing path to input DIF file")
 	}
 
-	for _, fname := range flag.Args() {
-		err := process(os.Stdout, fname, *eda)
+	for _, fname := range fset.Args() {
+		err := process(w, fname, *eda)
 		if err != nil {
 			log.Fatalf("could not dump file %q: %+v", fname, err)
 		}
@@ -89,7 +102,7 @@ func process(w io.Writer, fname string, eda bool) error {
 	}
 	defer f.Close()
 
-	dec := eformat.NewDecoder(difIDFrom(f), f)
+	dec := eformat.NewDecoder(0, f)
 	dec.IsEDA = eda
 loop:
 	for {
@@ -117,13 +130,4 @@ loop:
 	}
 
 	return nil
-}
-
-func difIDFrom(f io.ReaderAt) uint8 {
-	p := []byte{0}
-	_, err := f.ReadAt(p, 1)
-	if err != nil {
-		panic(err)
-	}
-	return uint8(p[0])
 }
