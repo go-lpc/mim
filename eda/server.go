@@ -14,6 +14,8 @@ import (
 	"os"
 	"strconv"
 	"strings"
+
+	"github.com/go-lpc/mim/conddb"
 )
 
 // server allows to control an EDA board device.
@@ -25,12 +27,23 @@ type server struct {
 	devmem string
 	devshm string
 	cfgdir string
+
+	opts []Option
+	dev  *Device
 }
 
 func Serve(addr, odir, devmem, devshm, cfgdir string) error {
+	srv, err := newServer(addr, odir, devmem, devshm, cfgdir)
+	if err != nil {
+		return fmt.Errorf("could not create eda server: %w", err)
+	}
+	return srv.serve()
+}
+
+func newServer(addr, odir, devmem, devshm, cfgdir string, opts ...Option) (*server, error) {
 	ctl, err := net.Listen("tcp", addr)
 	if err != nil {
-		return fmt.Errorf("could not create eda-ctl server on %q: %w", addr, err)
+		return nil, fmt.Errorf("could not create eda-ctl server on %q: %w", addr, err)
 	}
 
 	srv := &server{
@@ -42,8 +55,10 @@ func Serve(addr, odir, devmem, devshm, cfgdir string) error {
 		devmem: devmem,
 		devshm: devshm,
 		cfgdir: cfgdir,
+
+		opts: opts,
 	}
-	return srv.serve()
+	return srv, nil
 }
 
 func (srv *server) serve() error {
@@ -68,16 +83,19 @@ func (srv *server) handle(conn net.Conn) error {
 	srv.msg.Printf("serving %v...", conn.RemoteAddr())
 	defer srv.msg.Printf("serving %v... [done]", conn.RemoteAddr())
 
-	dev, err := newDevice(srv.devmem, srv.odir, srv.devshm, srv.cfgdir)
+	srv.dev = nil
+	dev, err := newDevice(
+		srv.devmem, srv.odir, srv.devshm, srv.cfgdir,
+		srv.opts...,
+	)
 	if err != nil {
 		return fmt.Errorf("could not create EDA device: %w", err)
 	}
 	defer dev.Close()
+	srv.dev = dev
 
 	// FIXME(sbinet): use DIM hooks to configure those
 	dev.id = 1
-	dev.rfms = []int{0, 1}
-	dev.cfg.daq.delta = 180
 	dev.cfg.hr.rshaper = 3
 	dim, _, err := net.SplitHostPort(conn.RemoteAddr().String())
 	if err != nil {
@@ -92,8 +110,8 @@ func (srv *server) handle(conn net.Conn) error {
 loop:
 	for {
 		var req struct {
-			Name string   `json:"name"`
-			Args []string `json:"args"`
+			Name string           `json:"name"`
+			Args *json.RawMessage `json:"args"`
 		}
 
 		err = json.NewDecoder(conn).Decode(&req)
@@ -105,30 +123,76 @@ loop:
 			}
 			continue
 		}
-		dev.msg.Printf("received request: name=%q, args=%v", req.Name, req.Args)
+		dev.msg.Printf("received request: name=%q", req.Name)
 
 		switch strings.ToLower(req.Name) {
-		case "configure":
-			difid, err := strconv.Atoi(req.Args[0])
+		case "scan":
+			var args []struct {
+				RFM  int `json:"rfm"`
+				EDA  int `json:"eda"`
+				Slot int `json:"slot"`
+			}
+			err = json.Unmarshal(*req.Args, &args)
 			if err != nil {
-				srv.msg.Printf("could not decode difid to configure (args=%v): %+v",
-					req.Args, err,
+				srv.msg.Printf("could not decode %q payload: %+v",
+					req.Name, err,
 				)
 				srv.reply(conn, err)
 				continue
 			}
-			// FIXME(sbinet): handle hysteresis, make sure addrs are unique.
-			dev.cfg.daq.addrs = append(dev.cfg.daq.addrs, fmt.Sprintf(
-				"%s:%d", dim, 10000+difid,
-			))
-			srv.msg.Printf("addrs: %q", dev.cfg.daq.addrs)
-
-			err = dev.Configure()
+			dev.rfms = nil
+			dev.difs = make(map[int]uint8, nRFM)
+			dev.cfg.daq.rfm = 0
+			for _, arg := range args {
+				dev.msg.Printf(
+					"scan: rfm=%d, eda-id=%d, slot-id=%d",
+					arg.RFM, arg.EDA, arg.Slot,
+				)
+				dev.rfms = append(dev.rfms, arg.Slot)
+				dev.difs[arg.Slot] = uint8(arg.RFM)
+				dev.id = uint32(arg.EDA)
+				dev.cfg.daq.rfm |= (1 << arg.Slot)
+			}
+			err = nil
 			srv.reply(conn, err)
+			// FIXME(sbinet): compare expected scan-result with
+			// EDA introspection functions.
+			// if err != nil {
+			// 	srv.msg.Printf("could not scan EDA device: %+v", err)
+			// 	continue
+			// }
+
+		case "configure":
+			var args []struct {
+				DIF   uint8         `json:"dif"`
+				ASICS []conddb.ASIC `json:"asics"`
+			}
+			err = json.Unmarshal(*req.Args, &args)
 			if err != nil {
-				srv.msg.Printf("could not configure EDA device: %+v", err)
+				srv.msg.Printf("could not decode %q payload: %+v",
+					req.Name, err,
+				)
+				srv.reply(conn, err)
 				continue
 			}
+
+			for _, arg := range args {
+				// FIXME(sbinet): handle hysteresis, make sure addrs are unique.
+				dev.cfg.daq.addrs = append(dev.cfg.daq.addrs, fmt.Sprintf(
+					"%s:%d", dim, 10000+int(arg.DIF),
+				))
+				srv.msg.Printf("addrs: %q", dev.cfg.daq.addrs)
+
+				dev.setDBConfig(arg.DIF, arg.ASICS)
+
+				err = dev.configASICs(arg.DIF)
+				if err != nil {
+					srv.msg.Printf("could not configure EDA device: %+v", err)
+					srv.reply(conn, err)
+					continue
+				}
+			}
+			srv.reply(conn, nil)
 
 		case "initialize":
 			err = dev.Initialize()
@@ -139,7 +203,17 @@ loop:
 			}
 
 		case "start":
-			run, err := strconv.Atoi(req.Args[0])
+			var args []string
+			err = json.Unmarshal(*req.Args, &args)
+			if err != nil {
+				srv.msg.Printf("could not decode %q payload: %+v",
+					req.Name, err,
+				)
+				srv.reply(conn, err)
+				continue
+			}
+
+			run, err := strconv.Atoi(args[0])
 			if err != nil {
 				srv.msg.Printf("could not decode run-nbr for start-run (args=%v): %+v",
 					req.Args, err,
@@ -167,6 +241,8 @@ loop:
 
 		default:
 			srv.msg.Printf("unknown command name=%q, args=%q", req.Name, req.Args)
+			err = fmt.Errorf("unknown command %q", req.Name)
+			srv.reply(conn, err)
 			continue
 		}
 	}

@@ -21,6 +21,7 @@ func TestReadConf(t *testing.T) {
 			dev  Device
 			hrID uint32
 		)
+		dev.cfg.hr.db = newDbConfig()
 		dev.cfg.hr.data = dev.cfg.hr.buf[4:]
 
 		err := dev.hrscReadConf("testdata/conf_base.csv", hrID)
@@ -100,6 +101,7 @@ func TestReadConf(t *testing.T) {
 				hrID  uint32
 				fname = filepath.Join(tmp, tc.name+".txt")
 			)
+			dev.cfg.hr.db = newDbConfig()
 			dev.cfg.hr.data = dev.cfg.hr.buf[4:]
 
 			err := ioutil.WriteFile(fname, []byte(tc.data), 0644)
@@ -122,6 +124,7 @@ func TestReadConf(t *testing.T) {
 func TestReadConfHR(t *testing.T) {
 	t.Run("valid-hr", func(t *testing.T) {
 		var dev Device
+		dev.cfg.hr.db = newDbConfig()
 		dev.cfg.hr.data = dev.cfg.hr.buf[4:]
 
 		err := dev.hrscReadConfHRs("testdata/hr_sc_385.csv")
@@ -221,6 +224,7 @@ func TestReadConfHR(t *testing.T) {
 				dev   Device
 				fname = filepath.Join(tmp, tc.name+".txt")
 			)
+			dev.cfg.hr.db = newDbConfig()
 			dev.cfg.hr.data = dev.cfg.hr.buf[4:]
 
 			err := ioutil.WriteFile(fname, []byte(tc.data), 0644)
@@ -243,6 +247,7 @@ func TestReadConfHR(t *testing.T) {
 func TestReadWriteConfHR(t *testing.T) {
 	var dev Device
 
+	dev.cfg.hr.db = newDbConfig()
 	dev.cfg.hr.data = dev.cfg.hr.buf[4:]
 
 	err := dev.hrscReadConfHRs("testdata/hr_sc_385.csv")
@@ -279,6 +284,7 @@ func TestReadWriteConfHR(t *testing.T) {
 func TestReadDacFloor(t *testing.T) {
 	t.Run("valid-dac-file", func(t *testing.T) {
 		var dev Device
+		dev.cfg.hr.db = newDbConfig()
 		err := dev.readThOffset("testdata/dac_floor_4rfm.csv")
 		if err != nil {
 			t.Fatalf("could not read config file: %+v", err)
@@ -409,6 +415,8 @@ func TestReadDacFloor(t *testing.T) {
 				dev   Device
 				fname = filepath.Join(tmp, tc.name+".txt")
 			)
+			dev.cfg.hr.db = newDbConfig()
+
 			err := ioutil.WriteFile(fname, []byte(tc.data), 0644)
 			if err != nil {
 				t.Fatalf("could not create tmp file: %+v", err)
@@ -429,6 +437,7 @@ func TestReadDacFloor(t *testing.T) {
 func TestReadPreAmpGain(t *testing.T) {
 	t.Run("valid-pre-amp", func(t *testing.T) {
 		var dev Device
+		dev.cfg.hr.db = newDbConfig()
 		err := dev.readPreAmpGain("testdata/pa_gain_4rfm.csv")
 		if err != nil {
 			t.Fatalf("could not read config file: %+v", err)
@@ -532,6 +541,8 @@ func TestReadPreAmpGain(t *testing.T) {
 				dev   Device
 				fname = filepath.Join(tmp, tc.name+".txt")
 			)
+			dev.cfg.hr.db = newDbConfig()
+
 			err := ioutil.WriteFile(fname, []byte(tc.data), 0644)
 			if err != nil {
 				t.Fatalf("could not create tmp file: %+v", err)
@@ -552,6 +563,8 @@ func TestReadPreAmpGain(t *testing.T) {
 func TestReadMask(t *testing.T) {
 	t.Run("valid-mask", func(t *testing.T) {
 		var dev Device
+		dev.cfg.hr.db = newDbConfig()
+
 		err := dev.readMask("testdata/mask_4rfm.csv")
 		if err != nil {
 			t.Fatalf("could not read config file: %+v", err)
@@ -743,6 +756,8 @@ func TestReadMask(t *testing.T) {
 				dev   Device
 				fname = filepath.Join(tmp, tc.name+".txt")
 			)
+			dev.cfg.hr.db = newDbConfig()
+
 			err := ioutil.WriteFile(fname, []byte(tc.data), 0644)
 			if err != nil {
 				t.Fatalf("could not create tmp file: %+v", err)

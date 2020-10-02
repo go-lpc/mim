@@ -1610,6 +1610,14 @@ func bit32(word, digit uint32) uint32 {
 	return (word >> digit) & 0x1
 }
 
+func bitU64(v uint64, pos uint32) uint8 {
+	o := v & uint64(1<<pos)
+	if o == 0 {
+		return 0
+	}
+	return 1
+}
+
 func (dev *Device) daqFIFOInit(rfm int) error {
 	fifo := &dev.regs.fifo.daqCSR[rfm]
 

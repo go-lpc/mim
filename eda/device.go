@@ -13,6 +13,7 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"strconv"
 	"time"
 
 	"github.com/go-lpc/mim/eda/internal/regs"
@@ -82,7 +83,8 @@ type Device struct {
 	}
 
 	cfg struct {
-		ctl struct {
+		mode string // csv or db
+		ctl  struct {
 			addr string // addr+port to eda-ctl
 		}
 
@@ -90,6 +92,8 @@ type Device struct {
 			fname   string
 			rshaper uint32 // resistance shaper
 			cshaper uint32 // capacity shaper
+
+			db dbConfig // configuration from tmv-db
 
 			buf  [szCfgHR]byte
 			data []byte
@@ -178,6 +182,10 @@ func WithCtlAddr(addr string) Option {
 
 func WithConfigDir(dir string) Option {
 	return func(dev *Device) {
+		if dir == "" {
+			return
+		}
+		dev.cfg.mode = "csv"
 		dev.cfg.hr.fname = filepath.Join(dir, "conf_base.csv")
 		dev.cfg.daq.fname = filepath.Join(dir, "dac_floor_4rfm.csv")
 		dev.cfg.preamp.fname = filepath.Join(dir, "pa_gain_4rfm.csv")
@@ -202,8 +210,9 @@ func newDevice(devmem, odir, devshm, cfgdir string) (*Device, error) {
 		buf: make([]byte, 4),
 	}
 	dev.mem.fd = mem
+	dev.cfg.mode = "db"
+	dev.cfg.hr.db = newDbConfig()
 	dev.cfg.hr.cshaper = 3
-	dev.cfg.daq.rfm = (1 << 0) | (1 << 1) // FIXME(sbinet): remove. take from config.
 	WithConfigDir(cfgdir)(dev)
 	WithDevSHM(devshm)(dev)
 
@@ -261,6 +270,8 @@ func NewDevice(fname string, runnbr uint32, odir string, opts ...Option) (*Devic
 		buf: make([]byte, 4),
 	}
 	dev.mem.fd = mem
+	dev.cfg.mode = "db"
+	dev.cfg.hr.db = newDbConfig()
 	dev.cfg.hr.cshaper = 3
 	WithConfigDir("/dev/shm/config_base")(dev)
 	WithDevSHM("/dev/shm")(dev)
@@ -303,6 +314,21 @@ func NewDevice(fname string, runnbr uint32, odir string, opts ...Option) (*Devic
 }
 
 func (dev *Device) Configure() error {
+	if dev.cfg.mode == "csv" {
+		return dev.configureFromCSV()
+	}
+
+	//	for _, rfm := range dev.difs {
+	//		err := dev.configASICs(rfm)
+	//		if err != nil {
+	//			return fmt.Errorf("eda: could not configure HR for rfm=%d: %w", rfm, err)
+	//		}
+	//	}
+
+	return nil
+}
+
+func (dev *Device) configureFromCSV() error {
 	err := dev.hrscReadConf(dev.cfg.hr.fname, 0)
 	if err != nil {
 		return fmt.Errorf("eda: could load single-HR configuration file: %w", err)
@@ -403,6 +429,114 @@ func (dev *Device) initFPGA() error {
 }
 
 func (dev *Device) initHR() error {
+	if dev.cfg.mode == "csv" {
+		return dev.initHRFromCSV()
+	}
+	return dev.initHRFromDB()
+}
+
+func (dev *Device) initHRFromDB() error {
+	// disable trig_out output pin (RFM v1 coupling problem)
+	dev.hrscSetBit(0, 854, 0)
+
+	dev.hrscSetRShaper(0, dev.cfg.hr.rshaper)
+	dev.hrscSetCShaper(0, dev.cfg.hr.cshaper)
+
+	dev.hrscCopyConf(1, 0)
+	dev.hrscCopyConf(2, 0)
+	dev.hrscCopyConf(3, 0)
+	dev.hrscCopyConf(4, 0)
+	dev.hrscCopyConf(5, 0)
+	dev.hrscCopyConf(6, 0)
+	dev.hrscCopyConf(7, 0)
+
+	// set chip IDs
+	for hr := uint32(0); hr < nHR; hr++ {
+		dev.hrscSetChipID(hr, hr+1)
+	}
+
+	// for each active RFM, tune the configuration and send it.
+	for i := range dev.rfms {
+		rfm := uint32(dev.rfms[i])
+		dif := dev.difs[int(rfm)]
+		asics := dev.cfg.hr.db.asics[dif]
+		// mask unused channels
+		for hr := uint32(0); hr < nHR; hr++ {
+			for ch := uint32(0); ch < nChans; ch++ {
+				m0 := bitU64(asics[hr].Mask0, ch)
+				m1 := bitU64(asics[hr].Mask1, ch)
+				m2 := bitU64(asics[hr].Mask2, ch)
+
+				mask := uint32(m0 | m1<<1 | m2<<2)
+				if verbose {
+					dev.msg.Printf("%d      %d      %d\n", hr, ch, mask)
+				}
+				dev.hrscSetMask(hr, ch, mask)
+			}
+		}
+
+		// set DAC thresholds
+		if verbose {
+			dev.msg.Printf("HR      thresh0     thresh1     thresh2\n")
+		}
+		for hr := uint32(0); hr < nHR; hr++ {
+			th0 := uint32(asics[hr].B0)
+			th1 := uint32(asics[hr].B1)
+			th2 := uint32(asics[hr].B2)
+
+			if verbose {
+				dev.msg.Printf("%d      %d      %d      %d\n", hr, th0, th1, th2)
+			}
+			dev.hrscSetDAC0(hr, th0)
+			dev.hrscSetDAC1(hr, th1)
+			dev.hrscSetDAC2(hr, th2)
+		}
+
+		// set preamplifier gain
+		if verbose {
+			dev.msg.Printf("HR      chan        pa_gain\n")
+		}
+		for hr := uint32(0); hr < nHR; hr++ {
+			for ch := uint32(0); ch < nChans; ch++ {
+				v, err := strconv.ParseUint(string(asics[hr].PreAmpGain[2*ch:2*ch+2]), 16, 8)
+				if err != nil {
+					return err
+				}
+				gain := uint32(v)
+				if verbose {
+					dev.msg.Printf("%d      %d      %d\n", hr, ch, gain)
+				}
+				dev.hrscSetPreAmp(hr, ch, gain)
+			}
+		}
+
+		// send to HRs
+		err := dev.hrscSetConfig(int(rfm))
+		if err != nil {
+			return fmt.Errorf(
+				"eda: could not send configuration to HR (dif=%d,slot=%d): %w",
+				dif, rfm, err,
+			)
+		}
+		dev.msg.Printf("Hardroc configuration (dif=%d, RFM=%d): [done]\n", dif, rfm)
+
+		err = dev.hrscResetReadRegisters(int(rfm))
+		if err != nil {
+			return fmt.Errorf(
+				"eda: could not reset read-registers for RFM=%d: %w",
+				rfm, err,
+			)
+		}
+		dev.msg.Printf("read-registers reset (DIF=%d, RFM=%d): [done]\n", dif, rfm)
+	}
+
+	// let DACs stabilize
+	time.Sleep(1 * time.Second)
+
+	return nil
+}
+
+func (dev *Device) initHRFromCSV() error {
 	// disable trig_out output pin (RFM v1 coupling problem)
 	dev.hrscSetBit(0, 854, 0)
 
