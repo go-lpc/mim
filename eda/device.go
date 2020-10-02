@@ -44,8 +44,9 @@ const (
 // Device represents an EDA board device.
 type Device struct {
 	msg  *log.Logger
-	id   uint32 // [0,8)
-	rfms []int  // list of enabled RFMs
+	id   uint32        // [0,8)
+	rfms []int         // list of enabled RFMs
+	difs map[int]uint8 // map of EDA-slot->DIF/RFM-id
 	mem  struct {
 		fd  *os.File
 		lw  *mmap.Handle
@@ -131,9 +132,10 @@ type Device struct {
 }
 
 type rfmSink struct {
-	id  int // RFM slot
-	w   *wbuf
-	sck net.Conn
+	id   uint8 // RFM/DIF ID
+	slot int   // EDA slot
+	w    *wbuf
+	sck  net.Conn
 }
 
 type Option func(*Device)
@@ -209,9 +211,11 @@ func newDevice(devmem, odir, devshm, cfgdir string) (*Device, error) {
 
 	// setup RFMs indices from provided mask
 	dev.rfms = nil
+	dev.difs = make(map[int]uint8, nRFM)
 	for i := 0; i < nRFM; i++ {
 		if (dev.cfg.daq.rfm>>i)&1 == 1 {
 			dev.rfms = append(dev.rfms, i)
+			dev.difs[i] = difIDFrom(dev.id, i)
 		}
 	}
 
@@ -604,14 +608,18 @@ func (dev *Device) initRun() error {
 
 func (dev *Device) serveRFM(i int, addr string) {
 	rfm := dev.rfms[i]
-	dev.msg.Printf("dialing RFM(%d) to %q...", rfm, addr)
+	dev.msg.Printf(
+		"dialing RFM(dif=%d, slot=%d) to %q...",
+		dev.difs[rfm], rfm, addr,
+	)
 
 	conn, err := net.Dial("tcp", addr)
 	if err != nil {
 		dev.msg.Printf("could not connect to %q for rfm=%d: %+v", addr, rfm, err)
 		return
 	}
-	dev.daq.rfm[i].id = rfm
+	dev.daq.rfm[i].id = dev.difs[rfm]
+	dev.daq.rfm[i].slot = rfm
 	dev.daq.rfm[i].sck = conn
 	dev.msg.Printf("dialing RFM(%d) to %q... [ok]", rfm, addr)
 }

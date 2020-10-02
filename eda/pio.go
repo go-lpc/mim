@@ -1844,7 +1844,7 @@ func (dev *Device) daqWriteDIFData(w io.Writer, rfm int) {
 
 	// DIF DAQ header
 	wU8(0xB0)
-	wU8(difIDFrom(dev.id, rfm))
+	wU8(dev.difs[rfm])
 	// counters
 	wU32(dev.daq.cycleID[rfm] + 1) // FIXME(sbinet): off-by-one ?
 	wU32(dev.cntHit0(rfm))
@@ -1937,7 +1937,7 @@ func (dev *Device) daqSendDIFData(i int, buf []byte) error {
 			)
 		}
 		_, _ = dev.daq.f.Write(w.p[:cur])
-		dec := eformat.NewDecoder(difIDFrom(dev.id, sink.id), bytes.NewReader(w.p[:cur]))
+		dec := eformat.NewDecoder(dev.difs[sink.slot], bytes.NewReader(w.p[:cur]))
 		dec.IsEDA = true
 		var d eformat.DIF
 		err = dec.Decode(&d)
