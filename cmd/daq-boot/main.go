@@ -124,14 +124,14 @@ func start(cmd *exec.Cmd, dir string, kill chan int, doMon bool, freq time.Durat
 
 		go func() {
 			log.Printf("run pmon %q...", name)
-			err = p.Run()
+			err := p.Run()
 			if err != nil {
 				log.Printf("could not start monitoring %q: %+v", name, err)
 			}
 		}()
 
 		defer func() {
-			err = p.Kill()
+			err := p.Kill()
 			if err != nil {
 				log.Printf("could not stop monitoring %q: %+v", name, err)
 			}
