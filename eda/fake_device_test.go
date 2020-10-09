@@ -5,12 +5,59 @@
 package eda
 
 import (
+	"fmt"
+	"io/ioutil"
+	"os"
+	"path/filepath"
 	"sync"
 
 	"github.com/go-lpc/mim/eda/internal/regs"
 )
 
-func fakeFPGA(dev *Device, rfmID int, rfmDone uint32) {
+type fakeDev struct {
+	tmpdir string
+
+	mem string // path to /dev/mem of fake device
+	shm string // path to /dev/shm of fake device
+}
+
+func newFakeDev() (*fakeDev, error) {
+	tmpdir, err := ioutil.TempDir("", "eda-daq-")
+	if err != nil {
+		return nil, fmt.Errorf("could not create tmp-dir: %w", err)
+	}
+
+	devmem, err := os.Create(filepath.Join(tmpdir, "dev.mem"))
+	if err != nil {
+		os.RemoveAll(tmpdir)
+		return nil, fmt.Errorf("could not create fake dev-mem: %w", err)
+	}
+	defer devmem.Close()
+
+	_, err = devmem.WriteAt([]byte{1}, regs.LW_H2F_BASE+regs.LW_H2F_SPAN)
+	if err != nil {
+		os.RemoveAll(tmpdir)
+		return nil, fmt.Errorf("could not write to dev-mem: %w", err)
+	}
+	err = devmem.Close()
+	if err != nil {
+		os.RemoveAll(tmpdir)
+		return nil, fmt.Errorf("could not close devmem: %w", err)
+	}
+
+	fake := &fakeDev{
+		tmpdir: tmpdir,
+		mem:    devmem.Name(),
+		shm:    tmpdir,
+	}
+	return fake, nil
+}
+
+func (dev *fakeDev) close() {
+	_ = os.RemoveAll(dev.tmpdir)
+}
+
+func (*fakeDev) fpga(dev *Device, rfmID int, rfmDone uint32, exhaust func()) {
 	var (
 		fakeCtrl   []uint32
 		fakeState  []uint32
@@ -127,15 +174,75 @@ func fakeFPGA(dev *Device, rfmID int, rfmDone uint32) {
 	}...)
 
 	var mu sync.RWMutex
-	wrap(dev, &mu, &dev.regs.pio.ctrl, "pio.ctrl", fakeCtrl)
-	wrap(dev, &mu, &dev.regs.pio.state, "pio.state", fakeState)
-	wrap(dev, &mu, &dev.regs.pio.chkSC[rfmID], "pio.chk-sc", fakeChkSC)
-	wrap(dev, &mu, &dev.regs.pio.cnt24, "pio.cnt24", fakeCnt24)
+	wrap(dev, &mu, &dev.regs.pio.ctrl, "pio.ctrl", fakeCtrl, exhaust)
+	wrap(dev, &mu, &dev.regs.pio.state, "pio.state", fakeState, exhaust)
+	wrap(dev, &mu, &dev.regs.pio.chkSC[rfmID], "pio.chk-sc", fakeChkSC, exhaust)
+	wrap(dev, &mu, &dev.regs.pio.cnt24, "pio.cnt24", fakeCnt24, exhaust)
 
 	wrap(
 		dev, &mu,
 		&dev.regs.fifo.daqCSR[rfmID].pins[regs.ALTERA_AVALON_FIFO_STATUS_REG],
 		"fifo.daq-csr[rfm]",
 		fakeDaqCSR,
+		exhaust,
 	)
+}
+
+type fakeReg32 struct {
+	name string
+	mu   *sync.RWMutex
+	cr   int
+	cw   int
+
+	rs []uint32
+}
+
+const dbg = false
+
+func wrap(dev *Device, mu *sync.RWMutex, reg *reg32, name string, rs []uint32, exhaust func()) *fakeReg32 {
+	var (
+		mon = fakeReg32{
+			name: name,
+			mu:   mu,
+			rs:   rs,
+		}
+		r = reg.r
+		w = reg.w
+	)
+	reg.r = func() uint32 {
+		mon.mu.Lock()
+		defer mon.mu.Unlock()
+		cr := mon.cr
+		mon.cr++
+		v := r()
+		vv := v
+		ok := false
+		if cr < len(mon.rs) {
+			v = mon.rs[cr]
+			ok = true
+		}
+		if dbg {
+			dev.msg.Printf("%s: nr=%d, v=0x%x|0x%x", name, cr, v, vv)
+		}
+		if !ok {
+			dev.msg.Printf("%s: nr=%d, v=0x%x|0x%x", name, cr, v, vv)
+			if exhaust != nil {
+				exhaust()
+				return v
+			}
+			panic("exhaust: " + name)
+		}
+		return v
+	}
+	reg.w = func(v uint32) {
+		mon.mu.Lock()
+		defer mon.mu.Unlock()
+		mon.cw++
+		cw := mon.cw
+		if dbg {
+			dev.msg.Printf("%s: nw=%d, v=0x%x", name, cw-1, v)
+		}
+		w(v)
+	}
+	return &mon
 }

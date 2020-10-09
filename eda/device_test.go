@@ -9,10 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"net"
-	"os"
-	"path/filepath"
 	"strings"
 	"sync"
 	"testing"
@@ -107,29 +104,15 @@ func TestRun(t *testing.T) {
 
 			rfmAddr := sink(done, tc.rfm)
 
-			tmpdir, err := ioutil.TempDir("", "eda-daq-")
+			fdev, err := newFakeDev()
 			if err != nil {
-				t.Fatalf("could not create tmp-dir: %+v", err)
+				t.Fatalf("coud not create fake device: %+v", err)
 			}
-			defer os.RemoveAll(tmpdir)
+			defer fdev.close()
 
-			devmem, err := os.Create(filepath.Join(tmpdir, "dev.mem"))
-			if err != nil {
-				t.Fatalf("could not create fake dev-mem: %+v", err)
-			}
-			defer devmem.Close()
-
-			_, err = devmem.WriteAt([]byte{1}, regs.LW_H2F_BASE+regs.LW_H2F_SPAN)
-			if err != nil {
-				t.Fatalf("could not write to dev-mem: %+v", err)
-			}
-			err = devmem.Close()
-			if err != nil {
-				t.Fatalf("could not close devmem: %+v", err)
-			}
-
-			dev, err := NewDevice(devmem.Name(), 42, tmpdir,
-				WithDevSHM(tmpdir),
+			dev, err := NewDevice(
+				fdev.mem, 42, fdev.tmpdir,
+				WithDevSHM(fdev.shm),
 				WithCtlAddr(""),
 				WithConfigDir("./testdata"),
 				WithThreshold(0),
@@ -146,7 +129,7 @@ func TestRun(t *testing.T) {
 			dev.rfms = []int{tc.rfm}
 			dev.cfg.daq.addrs = []string{rfmAddr}
 
-			fakeFPGA(dev, tc.rfm, tc.done)
+			fdev.fpga(dev, tc.rfm, tc.done, nil)
 
 			err = dev.Configure()
 			if err != nil {
@@ -177,29 +160,14 @@ func TestRun(t *testing.T) {
 }
 
 func TestDumpRegisters(t *testing.T) {
-	tmpdir, err := ioutil.TempDir("", "eda-daq-")
+	fdev, err := newFakeDev()
 	if err != nil {
-		t.Fatalf("could not create tmp-dir: %+v", err)
+		t.Fatalf("could not create fake device: %+v", err)
 	}
-	defer os.RemoveAll(tmpdir)
+	defer fdev.close()
 
-	devmem, err := os.Create(filepath.Join(tmpdir, "dev.mem"))
-	if err != nil {
-		t.Fatalf("could not create fake dev-mem: %+v", err)
-	}
-	defer devmem.Close()
-
-	_, err = devmem.WriteAt([]byte{1}, regs.LW_H2F_BASE+regs.LW_H2F_SPAN)
-	if err != nil {
-		t.Fatalf("could not write to dev-mem: %+v", err)
-	}
-	err = devmem.Close()
-	if err != nil {
-		t.Fatalf("could not close devmem: %+v", err)
-	}
-
-	dev, err := NewDevice(devmem.Name(), 42, tmpdir,
-		WithDevSHM(tmpdir),
+	dev, err := NewDevice(fdev.mem, 42, fdev.tmpdir,
+		WithDevSHM(fdev.shm),
 		WithConfigDir("./testdata"),
 	)
 	if err != nil {
@@ -211,76 +179,76 @@ func TestDumpRegisters(t *testing.T) {
 	wrap(dev, &mu, &dev.regs.pio.state, "pio.state", []uint32{
 		0x1,
 		0x8 << regs.SHIFT_CMD_CODE_MEM,
-	})
+	}, nil)
 
 	wrap(dev, &mu, &dev.regs.pio.ctrl, "pio.ctrl", []uint32{
 		0x2,
 		0x2,
-	})
+	}, nil)
 
 	wrap(dev, &mu, &dev.regs.pio.pulser, "pio.pulser", []uint32{
 		0x3,
-	})
+	}, nil)
 
 	wrap(dev, &mu, &dev.regs.pio.cntHit0[0], "pio.cntHit0[0]", []uint32{
 		0x4,
-	})
+	}, nil)
 
 	wrap(dev, &mu, &dev.regs.pio.cntHit0[1], "pio.cntHit0[1]", []uint32{
 		0x5,
-	})
+	}, nil)
 
 	wrap(dev, &mu, &dev.regs.pio.cntHit0[2], "pio.cntHit0[2]", []uint32{
 		0x6,
-	})
+	}, nil)
 
 	wrap(dev, &mu, &dev.regs.pio.cntHit0[3], "pio.cntHit0[3]", []uint32{
 		0x7,
-	})
+	}, nil)
 
 	wrap(dev, &mu, &dev.regs.pio.cntHit1[0], "pio.cntHit0[0]", []uint32{
 		0x8,
-	})
+	}, nil)
 
 	wrap(dev, &mu, &dev.regs.pio.cntHit1[1], "pio.cntHit1[1]", []uint32{
 		0x9,
-	})
+	}, nil)
 
 	wrap(dev, &mu, &dev.regs.pio.cntHit1[2], "pio.cntHit1[2]", []uint32{
 		0x10,
-	})
+	}, nil)
 
 	wrap(dev, &mu, &dev.regs.pio.cntHit1[3], "pio.cntHit1[3]", []uint32{
 		0x11,
-	})
+	}, nil)
 
 	wrap(dev, &mu, &dev.regs.pio.cntTrig, "pio.cntTrig", []uint32{
 		0x12,
-	})
+	}, nil)
 
 	wrap(dev, &mu, &dev.regs.pio.cnt48MSB, "pio.cnt48MSB", []uint32{
 		0x13,
-	})
+	}, nil)
 
 	wrap(dev, &mu, &dev.regs.pio.cnt48LSB, "pio.cnt48LSB", []uint32{
 		0x14,
-	})
+	}, nil)
 
 	wrap(dev, &mu, &dev.regs.fifo.daqCSR[0].pins[0], "fifo.daqCSR[0]", []uint32{
 		0x15,
-	})
+	}, nil)
 
 	wrap(dev, &mu, &dev.regs.fifo.daqCSR[1].pins[0], "fifo.daqCSR[1]", []uint32{
 		0x16,
-	})
+	}, nil)
 
 	wrap(dev, &mu, &dev.regs.fifo.daqCSR[2].pins[0], "fifo.daqCSR[2]", []uint32{
 		0x17,
-	})
+	}, nil)
 
 	wrap(dev, &mu, &dev.regs.fifo.daqCSR[3].pins[0], "fifo.daqCSR[3]", []uint32{
 		0x18,
-	})
+	}, nil)
 
 	o := new(strings.Builder)
 	err = dev.DumpRegisters(o)
@@ -320,29 +288,14 @@ synchro FSM state= 8 (stop run)
 func TestDumpFIFOStatus(t *testing.T) {
 	for _, rfmID := range []int{0, 1, 2, 3} {
 		t.Run(fmt.Sprintf("rfm=%d", rfmID), func(t *testing.T) {
-			tmpdir, err := ioutil.TempDir("", "eda-daq-")
+			fdev, err := newFakeDev()
 			if err != nil {
-				t.Fatalf("could not create tmp-dir: %+v", err)
+				t.Fatalf("could not create fake device: %+v", err)
 			}
-			defer os.RemoveAll(tmpdir)
+			defer fdev.close()
 
-			devmem, err := os.Create(filepath.Join(tmpdir, "dev.mem"))
-			if err != nil {
-				t.Fatalf("could not create fake dev-mem: %+v", err)
-			}
-			defer devmem.Close()
-
-			_, err = devmem.WriteAt([]byte{1}, regs.LW_H2F_BASE+regs.LW_H2F_SPAN)
-			if err != nil {
-				t.Fatalf("could not write to dev-mem: %+v", err)
-			}
-			err = devmem.Close()
-			if err != nil {
-				t.Fatalf("could not close devmem: %+v", err)
-			}
-
-			dev, err := NewDevice(devmem.Name(), 42, tmpdir,
-				WithDevSHM(tmpdir),
+			dev, err := NewDevice(fdev.mem, 42, fdev.tmpdir,
+				WithDevSHM(fdev.shm),
 				WithConfigDir("./testdata"),
 			)
 			if err != nil {
@@ -356,27 +309,27 @@ func TestDumpFIFOStatus(t *testing.T) {
 
 			wrap(dev, &mu, &dev.regs.fifo.daqCSR[rfmID].pins[regs.ALTERA_AVALON_FIFO_LEVEL_REG], "fifo-level", []uint32{
 				0x1,
-			})
+			}, nil)
 
 			wrap(dev, &mu, &dev.regs.fifo.daqCSR[rfmID].pins[regs.ALTERA_AVALON_FIFO_STATUS_REG], "fifo-status", []uint32{
 				0xffffff,
-			})
+			}, nil)
 
 			wrap(dev, &mu, &dev.regs.fifo.daqCSR[rfmID].pins[regs.ALTERA_AVALON_FIFO_EVENT_REG], "fifo-event", []uint32{
 				0xffffff,
-			})
+			}, nil)
 
 			wrap(dev, &mu, &dev.regs.fifo.daqCSR[rfmID].pins[regs.ALTERA_AVALON_FIFO_IENABLE_REG], "fifo-ienable", []uint32{
 				0xffffff,
-			})
+			}, nil)
 
 			wrap(dev, &mu, &dev.regs.fifo.daqCSR[rfmID].pins[regs.ALTERA_AVALON_FIFO_ALMOSTFULL_REG], "fifo-almost-full", []uint32{
 				128,
-			})
+			}, nil)
 
 			wrap(dev, &mu, &dev.regs.fifo.daqCSR[rfmID].pins[regs.ALTERA_AVALON_FIFO_ALMOSTEMPTY_REG], "fifo-almost-empty", []uint32{
 				255,
-			})
+			}, nil)
 
 			o := new(strings.Builder)
 			err = dev.DumpFIFOStatus(o, rfmID)
@@ -409,29 +362,14 @@ almostempty:		255
 func TestDumpConfig(t *testing.T) {
 	for _, rfmID := range []int{0, 1, 2, 3} {
 		t.Run(fmt.Sprintf("rfm=%d", rfmID), func(t *testing.T) {
-			tmpdir, err := ioutil.TempDir("", "eda-daq-")
+			fdev, err := newFakeDev()
 			if err != nil {
-				t.Fatalf("could not create tmp-dir: %+v", err)
+				t.Fatalf("could not create fake device: %+v", err)
 			}
-			defer os.RemoveAll(tmpdir)
+			defer fdev.close()
 
-			devmem, err := os.Create(filepath.Join(tmpdir, "dev.mem"))
-			if err != nil {
-				t.Fatalf("could not create fake dev-mem: %+v", err)
-			}
-			defer devmem.Close()
-
-			_, err = devmem.WriteAt([]byte{1}, regs.LW_H2F_BASE+regs.LW_H2F_SPAN)
-			if err != nil {
-				t.Fatalf("could not write to dev-mem: %+v", err)
-			}
-			err = devmem.Close()
-			if err != nil {
-				t.Fatalf("could not close devmem: %+v", err)
-			}
-
-			dev, err := NewDevice(devmem.Name(), 42, tmpdir,
-				WithDevSHM(tmpdir),
+			dev, err := NewDevice(fdev.mem, 42, fdev.tmpdir,
+				WithDevSHM(fdev.shm),
 				WithConfigDir("./testdata"),
 			)
 			if err != nil {
@@ -484,29 +422,14 @@ func TestNewDevice(t *testing.T) {
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			tmpdir, err := ioutil.TempDir("", "eda-daq-")
+			fdev, err := newFakeDev()
 			if err != nil {
-				t.Fatalf("could not create tmp-dir: %+v", err)
+				t.Fatalf("could not create fake device: %+v", err)
 			}
-			defer os.RemoveAll(tmpdir)
+			defer fdev.close()
 
-			devmem, err := os.Create(filepath.Join(tmpdir, "dev.mem"))
-			if err != nil {
-				t.Fatalf("could not create fake dev-mem: %+v", err)
-			}
-			defer devmem.Close()
-
-			_, err = devmem.WriteAt([]byte{1}, regs.LW_H2F_BASE+regs.LW_H2F_SPAN)
-			if err != nil {
-				t.Fatalf("could not write to dev-mem: %+v", err)
-			}
-			err = devmem.Close()
-			if err != nil {
-				t.Fatalf("could not close devmem: %+v", err)
-			}
-
-			dev, err := NewDevice(devmem.Name(), 42, tmpdir,
-				WithDevSHM(tmpdir),
+			dev, err := NewDevice(fdev.mem, 42, fdev.tmpdir,
+				WithDevSHM(fdev.shm),
 				WithCtlAddr(tc.ctl),
 				WithConfigDir("./testdata"),
 			)
@@ -527,59 +450,4 @@ func TestNewDevice(t *testing.T) {
 			defer dev.Close()
 		})
 	}
-}
-
-type fakeReg32 struct {
-	name string
-	mu   *sync.RWMutex
-	cr   int
-	cw   int
-
-	rs []uint32
-}
-
-const dbg = false
-
-func wrap(dev *Device, mu *sync.RWMutex, reg *reg32, name string, rs []uint32) *fakeReg32 {
-	var (
-		mon = fakeReg32{
-			name: name,
-			mu:   mu,
-			rs:   rs,
-		}
-		r = reg.r
-		w = reg.w
-	)
-	reg.r = func() uint32 {
-		mon.mu.Lock()
-		defer mon.mu.Unlock()
-		cr := mon.cr
-		mon.cr++
-		v := r()
-		vv := v
-		ok := false
-		if cr < len(mon.rs) {
-			v = mon.rs[cr]
-			ok = true
-		}
-		if dbg {
-			dev.msg.Printf("%s: nr=%d, v=0x%x|0x%x", name, cr, v, vv)
-		}
-		if !ok {
-			dev.msg.Printf("%s: nr=%d, v=0x%x|0x%x", name, cr, v, vv)
-			panic("exhaust: " + name)
-		}
-		return v
-	}
-	reg.w = func(v uint32) {
-		mon.mu.Lock()
-		defer mon.mu.Unlock()
-		mon.cw++
-		cw := mon.cw
-		if dbg {
-			dev.msg.Printf("%s: nw=%d, v=0x%x", name, cw-1, v)
-		}
-		w(v)
-	}
-	return &mon
 }

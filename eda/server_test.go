@@ -12,7 +12,6 @@ import (
 	"io"
 	"net"
 	"os"
-	"path/filepath"
 	"strconv"
 	"strings"
 	"testing"
@@ -37,32 +36,16 @@ func TestServerFail(t *testing.T) {
 }
 
 func TestServer(t *testing.T) {
-	tmpdir, err := ioutil.TempDir("", "eda-daq-")
+	fdev, err := newFakeDev()
 	if err != nil {
-		t.Fatalf("could not create tmp-dir: %+v", err)
+		t.Fatalf("could not create fake-dev: %+v", err)
 	}
-	defer os.RemoveAll(tmpdir)
+	defer fdev.close()
 
 	var (
-		devshm = tmpdir
-		odir   = tmpdir
+		odir   = fdev.tmpdir
 		cfgdir = ""
 	)
-
-	devmem, err := os.Create(filepath.Join(tmpdir, "dev.mem"))
-	if err != nil {
-		t.Fatalf("could not create fake dev-mem: %+v", err)
-	}
-	defer devmem.Close()
-
-	_, err = devmem.WriteAt([]byte{1}, regs.LW_H2F_BASE+regs.LW_H2F_SPAN)
-	if err != nil {
-		t.Fatalf("could not write to dev-mem: %+v", err)
-	}
-	err = devmem.Close()
-	if err != nil {
-		t.Fatalf("could not close devmem: %+v", err)
-	}
 
 	addr, err := getTCPPort()
 	if err != nil {
@@ -71,7 +54,7 @@ func TestServer(t *testing.T) {
 	addr = "localhost:" + addr
 
 	srv, err := newServer(
-		addr, odir, devmem.Name(), devshm, cfgdir,
+		addr, odir, fdev.mem, fdev.shm, cfgdir,
 		func(dev *Device) { dev.cfg.mode = "db" },
 		WithRFMMask(1<<1), // dummy
 	)
@@ -219,8 +202,7 @@ func TestServer(t *testing.T) {
 				t.Fatalf("could not send %q: %+v", name, err)
 			}
 			ack(name)
-			//srv.dev.daq.done = make(chan int)
-			fakeFPGA(srv.dev, 2, regs.O_SC_DONE_2)
+			fdev.fpga(srv.dev, 2, regs.O_SC_DONE_2, nil)
 
 		case "err-invalid-req":
 			_, err = dim.Write([]byte("{]"))
