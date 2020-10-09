@@ -106,6 +106,8 @@ type Device struct {
 			rfm   uint32 // RFM ON mask
 
 			addrs []string // [addr:port]s for sending DIF data
+
+			timeout time.Duration // timeout for reset-BCID
 		}
 
 		preamp struct {
@@ -193,6 +195,12 @@ func WithConfigDir(dir string) Option {
 	}
 }
 
+func WithResetBCID(timeout time.Duration) Option {
+	return func(dev *Device) {
+		dev.cfg.daq.timeout = timeout
+	}
+}
+
 func newDevice(devmem, odir, devshm, cfgdir string, opts ...Option) (*Device, error) {
 	mem, err := os.OpenFile(devmem, os.O_RDWR|os.O_SYNC, 0666)
 	if err != nil {
@@ -213,6 +221,7 @@ func newDevice(devmem, odir, devshm, cfgdir string, opts ...Option) (*Device, er
 	dev.cfg.mode = "db"
 	dev.cfg.hr.db = newDbConfig()
 	dev.cfg.hr.cshaper = 3
+	WithResetBCID(10 * time.Second)(dev)
 	WithConfigDir(cfgdir)(dev)
 	WithDevSHM(devshm)(dev)
 
@@ -277,6 +286,7 @@ func NewDevice(fname string, runnbr uint32, odir string, opts ...Option) (*Devic
 	dev.cfg.mode = "db"
 	dev.cfg.hr.db = newDbConfig()
 	dev.cfg.hr.cshaper = 3
+	WithResetBCID(10 * time.Second)(dev)
 	WithConfigDir("/dev/shm/config_base")(dev)
 	WithDevSHM("/dev/shm")(dev)
 
@@ -647,7 +657,7 @@ func (dev *Device) Start() error {
 	}
 
 	dev.msg.Printf("waiting for reset-BCID...")
-	timer := time.NewTimer(10 * time.Second)
+	timer := time.NewTimer(dev.cfg.daq.timeout)
 	defer timer.Stop()
 	select {
 	case <-timer.C:
