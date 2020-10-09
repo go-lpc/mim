@@ -5,11 +5,60 @@
 package main
 
 import (
+	"fmt"
 	"io/ioutil"
 	"net"
 	"os"
 	"testing"
 )
+
+func TestXMain(t *testing.T) {
+	for _, tc := range []struct {
+		args []string
+		want error
+	}{
+		{
+			args: []string{"-=3"},
+			want: fmt.Errorf("could not parse input arguments: bad flag syntax: -=3"),
+		},
+		{
+			args: []string{"-run=-1", "-thresh=10", "-rshaper=3", "-rfm=3"},
+			want: fmt.Errorf("invalid run number value (=-1)"),
+		},
+		{
+			args: []string{"-run=42", "-thresh=-1", "-rshaper=3", "-rfm=3"},
+			want: fmt.Errorf("invalid threshold value (=-1)"),
+		},
+		{
+			args: []string{"-run=42", "-thresh=10", "-rshaper=-1", "-rfm=3"},
+			want: fmt.Errorf("invalid R-shaper value (=-1)"),
+		},
+		{
+			args: []string{"-run=42", "-thresh=10", "-rshaper=3", "-rfm=-1"},
+			want: fmt.Errorf("invalid RFM mask value (=-1)"),
+		},
+		{
+			args: []string{"-run=42", "-thresh=10", "-rshaper=3", "-rfm=1"},
+			want: fmt.Errorf("could not run eda-daq: could not dial eda-srv \":8877\": dial tcp :8877: connect: connection refused"),
+		},
+	} {
+		t.Run("", func(t *testing.T) {
+			got := xmain(tc.args)
+			switch {
+			case got == nil && tc.want == nil:
+				// ok.
+			case got != nil && tc.want == nil:
+				t.Fatalf("could not run eda-daq: %+v", got)
+			case got == nil && tc.want != nil:
+				t.Fatalf("expected an error (%v)", tc.want.Error())
+			case got != nil && tc.want != nil:
+				if got, want := got.Error(), tc.want.Error(); got != want {
+					t.Fatalf("invalid error:\ngot= %q\nwant=%q\n", got, want)
+				}
+			}
+		})
+	}
+}
 
 func TestRun(t *testing.T) {
 	t.Skip() // FIXME(sbinet)

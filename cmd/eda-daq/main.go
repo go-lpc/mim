@@ -14,46 +14,58 @@ import (
 	"os/signal"
 	"runtime/pprof"
 	"syscall"
+	"time"
 
 	"github.com/go-lpc/mim/eda"
 )
 
 func main() {
+	log.Fatal(xmain(os.Args[1:]))
+}
+
+func xmain(args []string) error {
 	var (
-		runnbr    = flag.Int("run", -1, "run number")
-		threshold = flag.Int("thresh", -1, "threshold")
-		rshaper   = flag.Int("rshaper", -1, "R shaper")
-		rfmOn     = flag.Int("rfm", -1, "RFM-ON mask")
-		srvAddr   = flag.String("srv-addr", ":8877", "eda-srv [address]:port to dial")
-		odir      = flag.String("o", "/home/root/run", "output dir")
+		fset = flag.NewFlagSet("eda-daq", flag.ContinueOnError)
+
+		runnbr    = fset.Int("run", -1, "run number")
+		threshold = fset.Int("thresh", -1, "threshold")
+		rshaper   = fset.Int("rshaper", -1, "R shaper")
+		rfmOn     = fset.Int("rfm", -1, "RFM-ON mask")
+		srvAddr   = fset.String("srv-addr", ":8877", "eda-srv [address]:port to dial")
+		odir      = fset.String("o", "/home/root/run", "output dir")
 	)
 
 	log.SetPrefix("eda-daq: ")
 	log.SetFlags(0)
 
-	flag.Parse()
+	err := fset.Parse(args)
+	if err != nil {
+		return fmt.Errorf("could not parse input arguments: %w", err)
+	}
 
 	log.Printf("run=%d threshold=%d R-shaper=%d RFM-ON[3:0]=%d", *runnbr, *threshold, *rshaper, *rfmOn)
 
 	switch {
 	case *runnbr < 0:
-		log.Fatalf("invalid run number value")
+		return fmt.Errorf("invalid run number value (=%v)", *runnbr)
 	case *threshold < 0:
-		log.Fatalf("invalid threshold value")
+		return fmt.Errorf("invalid threshold value (=%v)", *threshold)
 	case *rshaper < 0:
-		log.Fatalf("invalid R-shaper value")
+		return fmt.Errorf("invalid R-shaper value (=%v)", *rshaper)
 	case *rfmOn < 0:
-		log.Fatalf("invalid RFM mask value")
+		return fmt.Errorf("invalid RFM mask value (=%v)", *rfmOn)
 	}
 
-	err := run(
+	err = run(
 		uint32(*runnbr), uint32(*threshold), uint32(*rshaper), uint32(*rfmOn),
 		*srvAddr, *odir,
 		"/dev/mem", "dev/shm", "/dev/shm/config_base",
 	)
 	if err != nil {
-		log.Fatalf("could not run eda-daq: %+v", err)
+		return fmt.Errorf("could not run eda-daq: %+v", err)
 	}
+
+	return nil
 }
 
 func run(run, threshold, rshaper, rfm uint32, srvAddr, odir, devmem, devshm, cfgdir string) error {
@@ -75,6 +87,7 @@ func run(run, threshold, rshaper, rfm uint32, srvAddr, odir, devmem, devshm, cfg
 		eda.WithRFMMask(rfm),
 		eda.WithDevSHM(devshm),
 		eda.WithConfigDir(cfgdir),
+		eda.WithResetBCID(5*time.Minute),
 	)
 	if err != nil {
 		return fmt.Errorf("could not initialize EDA device: %w", err)
@@ -89,6 +102,19 @@ func run(run, threshold, rshaper, rfm uint32, srvAddr, odir, devmem, devshm, cfg
 	err = dev.Initialize()
 	if err != nil {
 		return fmt.Errorf("could not initialize EDA device: %w", err)
+	}
+
+	{
+		conn, err := net.Dial("tcp", ":8877")
+		if err != nil {
+			return fmt.Errorf("could not dial eda-ctl: %w", err)
+		}
+		defer conn.Close()
+
+		_, err = conn.Write([]byte("eda-ready"))
+		if err != nil {
+			return fmt.Errorf("could not send eda-ctl ready: %w", err)
+		}
 	}
 
 	err = dev.Start()
