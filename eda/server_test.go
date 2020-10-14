@@ -181,10 +181,15 @@ func TestServer(t *testing.T) {
 		srv.msg.Printf("sending %q...", name)
 		switch name {
 		case "scan":
+			type DAQ struct {
+				RShaper     int `json:"rshaper"`
+				TriggerMode int `json:"trigger_type"`
+			}
 			type Arg struct {
 				RFM  int `json:"rfm"`
 				EDA  int `json:"eda"`
 				Slot int `json:"slot"`
+				DAQ  DAQ `json:"daq_state"`
 			}
 			type Req struct {
 				Name string `json:"name"`
@@ -193,7 +198,7 @@ func TestServer(t *testing.T) {
 			req := Req{
 				Name: name,
 				Args: []Arg{
-					{RFM: 1, EDA: 1, Slot: 2},
+					{RFM: 1, EDA: 1, Slot: 2, DAQ: DAQ{RShaper: 3}},
 					//{RFM: 2, EDA: 1, Slot: 3},
 				},
 			}

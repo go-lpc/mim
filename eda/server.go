@@ -131,6 +131,10 @@ loop:
 				RFM  int `json:"rfm"`
 				EDA  int `json:"eda"`
 				Slot int `json:"slot"`
+				DAQ  struct {
+					RShaper     int `json:"rshaper"`
+					TriggerMode int `json:"trigger_type"`
+				} `json:"daq_state"`
 			}
 			err = json.Unmarshal(*req.Args, &args)
 			if err != nil {
@@ -152,6 +156,7 @@ loop:
 				dev.difs[arg.Slot] = uint8(arg.RFM)
 				dev.id = uint32(arg.EDA)
 				dev.cfg.daq.rfm |= (1 << arg.Slot)
+				dev.cfg.hr.rshaper = uint32(arg.DAQ.RShaper)
 			}
 			err = nil
 			srv.reply(conn, err)
