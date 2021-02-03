@@ -12,8 +12,6 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v2
-      - name: cgo-deps
-        run:  sudo apt install pkg-config libftdi1-dev
       - name: golangci-lint
         uses: golangci/golangci-lint-action@v2
         with:

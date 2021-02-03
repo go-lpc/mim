@@ -40,12 +40,6 @@ jobs:
     - name: Checkout code
       uses: actions/checkout@v2
 
-    - name: Install Linux packages
-      if: matrix.platform == 'ubuntu-latest'
-      run: |
-        sudo apt-get update
-        sudo apt-get install -qq pkg-config libftdi1-dev
-
 ##    - name: Build-Linux-32b
 ##      if: matrix.platform == 'ubuntu-latest'
 ##      run: |
