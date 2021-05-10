@@ -40,10 +40,10 @@ jobs:
     - name: Checkout code
       uses: actions/checkout@v2
 
-##    - name: Build-Linux-32b
-##      if: matrix.platform == 'ubuntu-latest'
-##      run: |
-##        GOARCH=386   go install -v ./...
+    - name: Build-Linux-32b-arm
+      if: matrix.platform == 'ubuntu-latest'
+      run: |
+        GOARCH=arm   go install -v ./...
     - name: Build-Linux-64b
       if: matrix.platform == 'ubuntu-latest'
       run: |
