@@ -1,6 +1,6 @@
 module github.com/go-lpc/mim
 
-go 1.15
+go 1.16
 
 require (
 	github.com/go-daq/tdaq v0.14.1
