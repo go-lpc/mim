@@ -338,30 +338,20 @@ func NewDevice(fname string, odir string, opts ...Option) (*Device, error) {
 	return dev, nil
 }
 
-type BootConfig struct {
-	RFM  int `json:"rfm"`
-	EDA  int `json:"eda"`
-	Slot int `json:"slot"`
-	DAQ  struct {
-		RShaper     int `json:"rshaper"`
-		TriggerMode int `json:"trigger_type"`
-	} `json:"daq_state"`
-}
-
-func (dev *Device) Boot(args []BootConfig) error {
+func (dev *Device) Boot(args []conddb.RFM) error {
 	dev.rfms = nil
 	dev.difs = make(map[int]uint8, nRFM)
 	dev.cfg.daq.rfm = 0
-	for _, arg := range args {
+	for _, rfm := range args {
 		dev.msg.Printf(
-			"boot: rfm=%d, eda-id=%d, slot-id=%d",
-			arg.RFM, arg.EDA, arg.Slot,
+			"boot: rfm=%d, eda-id=%v, slot-id=%d",
+			rfm.ID, rfm.EDA, rfm.Slot,
 		)
-		dev.rfms = append(dev.rfms, arg.Slot)
-		dev.difs[arg.Slot] = uint8(arg.RFM)
-		dev.id = uint32(arg.EDA)
-		dev.cfg.daq.rfm |= (1 << arg.Slot)
-		dev.cfg.hr.rshaper = uint32(arg.DAQ.RShaper)
+		dev.rfms = append(dev.rfms, rfm.Slot)
+		dev.difs[rfm.Slot] = uint8(rfm.ID)
+		dev.id = uint32(rfm.EDA)
+		dev.cfg.daq.rfm |= (1 << rfm.Slot)
+		dev.cfg.hr.rshaper = uint32(rfm.DAQ.RShaper)
 	}
 	return nil
 }

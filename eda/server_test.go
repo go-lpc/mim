@@ -61,6 +61,9 @@ func TestServer(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	srv.newDevice = func(devmem, odir, devshm, cfgdir string, opts ...Option) (device, error) {
+		return newDevice(devmem, odir, devshm, cfgdir, opts...)
+	}
 
 	quit := make(chan int)
 	defer close(quit)
@@ -207,7 +210,7 @@ func TestServer(t *testing.T) {
 				t.Fatalf("could not send %q: %+v", name, err)
 			}
 			ack(name)
-			fdev.fpga(srv.dev, 2, regs.O_SC_DONE_2, nil)
+			fdev.fpga(srv.dev.(*Device), 2, regs.O_SC_DONE_2, nil)
 
 		case "err-invalid-req":
 			_, err = dim.Write([]byte("{]"))

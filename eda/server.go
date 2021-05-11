@@ -28,8 +28,10 @@ type server struct {
 	devshm string
 	cfgdir string
 
+	newDevice func(devmem, odir, devshm, cfgdir string, opts ...Option) (device, error)
+
 	opts []Option
-	dev  *Device
+	dev  device
 }
 
 func Serve(addr, odir, devmem, devshm, cfgdir string) error {
@@ -55,6 +57,10 @@ func newServer(addr, odir, devmem, devshm, cfgdir string, opts ...Option) (*serv
 		devmem: devmem,
 		devshm: devshm,
 		cfgdir: cfgdir,
+
+		newDevice: func(devmem, odir, devshm, cfgdir string, opts ...Option) (device, error) {
+			return newDevice(devmem, odir, devshm, cfgdir, opts...)
+		},
 
 		opts: opts,
 	}
@@ -84,7 +90,7 @@ func (srv *server) handle(conn net.Conn) error {
 	defer srv.msg.Printf("serving %v... [done]", conn.RemoteAddr())
 
 	srv.dev = nil
-	dev, err := newDevice(
+	dev, err := srv.newDevice(
 		srv.devmem, srv.odir, srv.devshm, srv.cfgdir,
 		srv.opts...,
 	)
@@ -94,9 +100,6 @@ func (srv *server) handle(conn net.Conn) error {
 	defer dev.Close()
 	srv.dev = dev
 
-	// FIXME(sbinet): use DIM hooks to configure those
-	dev.id = 1
-	dev.cfg.hr.rshaper = 3
 	dim, _, err := net.SplitHostPort(conn.RemoteAddr().String())
 	if err != nil {
 		return fmt.Errorf("could not extract dim-host ip from %q: %+v", conn.RemoteAddr().String(), err)
@@ -123,19 +126,11 @@ loop:
 			}
 			continue
 		}
-		dev.msg.Printf("received request: name=%q", req.Name)
+		srv.msg.Printf("received request: name=%q", req.Name)
 
 		switch strings.ToLower(req.Name) {
 		case "scan":
-			var args []struct {
-				RFM  int `json:"rfm"`
-				EDA  int `json:"eda"`
-				Slot int `json:"slot"`
-				DAQ  struct {
-					RShaper     int `json:"rshaper"`
-					TriggerMode int `json:"trigger_type"`
-				} `json:"daq_state"`
-			}
+			var args []conddb.RFM
 			err = json.Unmarshal(*req.Args, &args)
 			if err != nil {
 				srv.msg.Printf("could not decode %q payload: %+v",
@@ -144,21 +139,14 @@ loop:
 				srv.reply(conn, err)
 				continue
 			}
-			dev.rfms = nil
-			dev.difs = make(map[int]uint8, nRFM)
-			dev.cfg.daq.rfm = 0
-			for _, arg := range args {
-				dev.msg.Printf(
-					"scan: rfm=%d, eda-id=%d, slot-id=%d",
-					arg.RFM, arg.EDA, arg.Slot,
-				)
-				dev.rfms = append(dev.rfms, arg.Slot)
-				dev.difs[arg.Slot] = uint8(arg.RFM)
-				dev.id = uint32(arg.EDA)
-				dev.cfg.daq.rfm |= (1 << arg.Slot)
-				dev.cfg.hr.rshaper = uint32(arg.DAQ.RShaper)
+
+			err = dev.Boot(args)
+			if err != nil {
+				srv.msg.Printf("could not bootstrap EDA: %+v", err)
+				srv.reply(conn, err)
+				continue
 			}
-			err = nil
+
 			srv.reply(conn, err)
 			// FIXME(sbinet): compare expected scan-result with
 			// EDA introspection functions.
@@ -170,7 +158,7 @@ loop:
 		case "configure":
 			var args []struct {
 				DIF   uint8         `json:"dif"`
-				ASICS []conddb.ASIC `json:"asics"`
+				ASICs []conddb.ASIC `json:"asics"`
 			}
 			err = json.Unmarshal(*req.Args, &args)
 			if err != nil {
@@ -182,17 +170,11 @@ loop:
 			}
 
 			for _, arg := range args {
-				// FIXME(sbinet): handle hysteresis, make sure addrs are unique.
-				dev.cfg.daq.addrs = append(dev.cfg.daq.addrs, fmt.Sprintf(
-					"%s:%d", dim, 10000+int(arg.DIF),
-				))
-				srv.msg.Printf("addrs: %q", dev.cfg.daq.addrs)
-
-				dev.setDBConfig(arg.DIF, arg.ASICS)
-
-				err = dev.configASICs(arg.DIF)
+				addr := fmt.Sprintf("%s:%d", dim, 10000+int(arg.DIF))
+				srv.msg.Printf("configuring DIF=%d with addr=%q", arg.DIF, addr)
+				err := dev.ConfigureDIF(addr, arg.DIF, arg.ASICs)
 				if err != nil {
-					srv.msg.Printf("could not configure EDA device: %+v", err)
+					srv.msg.Printf("could not configure EDA device(dif=%d): %+v", arg.DIF, err)
 					srv.reply(conn, err)
 					continue
 				}
