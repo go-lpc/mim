@@ -10,3 +10,13 @@ type DAQState struct {
 	RShape      uint16
 	TriggerMode uint16
 }
+
+type RFM struct {
+	ID   int `json:"rfm"`
+	EDA  int `json:"eda"`
+	Slot int `json:"slot"`
+	DAQ  struct {
+		RShaper     int `json:"rshaper"`
+		TriggerMode int `json:"trigger_type"`
+	} `json:"daq_state"`
+}
