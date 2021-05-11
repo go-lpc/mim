@@ -16,6 +16,7 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/go-lpc/mim/conddb"
 	"github.com/go-lpc/mim/eda/internal/regs"
 	"github.com/go-lpc/mim/internal/mmap"
 	"golang.org/x/sync/errgroup"
@@ -41,6 +42,18 @@ const (
 const (
 	verbose = false
 )
+
+type device interface {
+	Boot([]conddb.RFM) error
+	ConfigureDIF(addr string, dif uint8, asics []conddb.ASIC) error
+	Initialize() error
+	Start(run uint32) error
+	Stop() error
+
+	Close() error
+}
+
+var _ device = (*Device)(nil)
 
 // Device represents an EDA board device.
 type Device struct {
@@ -323,6 +336,48 @@ func NewDevice(fname string, odir string, opts ...Option) (*Device, error) {
 	}()
 
 	return dev, nil
+}
+
+type BootConfig struct {
+	RFM  int `json:"rfm"`
+	EDA  int `json:"eda"`
+	Slot int `json:"slot"`
+	DAQ  struct {
+		RShaper     int `json:"rshaper"`
+		TriggerMode int `json:"trigger_type"`
+	} `json:"daq_state"`
+}
+
+func (dev *Device) Boot(args []BootConfig) error {
+	dev.rfms = nil
+	dev.difs = make(map[int]uint8, nRFM)
+	dev.cfg.daq.rfm = 0
+	for _, arg := range args {
+		dev.msg.Printf(
+			"boot: rfm=%d, eda-id=%d, slot-id=%d",
+			arg.RFM, arg.EDA, arg.Slot,
+		)
+		dev.rfms = append(dev.rfms, arg.Slot)
+		dev.difs[arg.Slot] = uint8(arg.RFM)
+		dev.id = uint32(arg.EDA)
+		dev.cfg.daq.rfm |= (1 << arg.Slot)
+		dev.cfg.hr.rshaper = uint32(arg.DAQ.RShaper)
+	}
+	return nil
+}
+
+func (dev *Device) ConfigureDIF(addr string, dif uint8, asics []conddb.ASIC) error {
+	// FIXME(sbinet): handle hysteresis, make sure addrs are unique.
+	dev.cfg.daq.addrs = append(dev.cfg.daq.addrs, addr)
+
+	dev.setDBConfig(dif, asics)
+
+	err := dev.configASICs(dif)
+	if err != nil {
+		return fmt.Errorf("eda: could not configure DIF=%d: %w", dif, err)
+	}
+
+	return nil
 }
 
 func (dev *Device) Configure() error {
