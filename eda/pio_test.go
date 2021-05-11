@@ -836,7 +836,6 @@ func TestDAQSendDIFData(t *testing.T) {
 			buf := make([]byte, 8)
 			dev := &Device{
 				msg: log.New(ioutil.Discard, "eda: ", 0),
-				run: 42,
 				buf: make([]byte, 4),
 			}
 			sck := tc.conn()

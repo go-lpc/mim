@@ -55,7 +55,6 @@ type Device struct {
 	}
 
 	dir string
-	run uint32
 
 	err  error
 	buf  []byte
@@ -265,7 +264,7 @@ func newDevice(devmem, odir, devshm, cfgdir string, opts ...Option) (*Device, er
 
 }
 
-func NewDevice(fname string, runnbr uint32, odir string, opts ...Option) (*Device, error) {
+func NewDevice(fname string, odir string, opts ...Option) (*Device, error) {
 	mem, err := os.OpenFile(fname, os.O_RDWR|os.O_SYNC, 0666)
 	if err != nil {
 		return nil, fmt.Errorf("eda: could not open %q: %w", fname, err)
@@ -279,7 +278,6 @@ func NewDevice(fname string, runnbr uint32, odir string, opts ...Option) (*Devic
 	dev := &Device{
 		msg: log.New(os.Stdout, "eda: ", 0),
 		dir: odir,
-		run: runnbr,
 		buf: make([]byte, 4),
 	}
 	dev.mem.fd = mem
@@ -639,7 +637,7 @@ func (dev *Device) initHRFromCSV() error {
 	return nil
 }
 
-func (dev *Device) Start() error {
+func (dev *Device) Start(run uint32) error {
 	resetBCID := make(chan uint32)
 	go func() {
 		var dccCmd uint32 = 0xe
@@ -651,7 +649,7 @@ func (dev *Device) Start() error {
 		resetBCID <- dccCmd
 	}()
 
-	err := dev.initRun()
+	err := dev.initRun(run)
 	if err != nil {
 		return fmt.Errorf("eda: could not init run: %w", err)
 	}
@@ -702,7 +700,7 @@ func (dev *Device) Start() error {
 	return nil
 }
 
-func (dev *Device) initRun() error {
+func (dev *Device) initRun(run uint32) error {
 	// save run-dependant settings
 	dev.msg.Printf(
 		"thresh_delta=%d, Rshaper=%d, RFM=%d\n",
@@ -711,7 +709,7 @@ func (dev *Device) initRun() error {
 		dev.cfg.daq.rfm,
 	)
 
-	fname := path.Join(dev.dir, fmt.Sprintf("settings_%03d.csv", dev.run))
+	fname := path.Join(dev.dir, fmt.Sprintf("settings_%03d.csv", run))
 	f, err := os.Create(fname)
 	if err != nil {
 		return fmt.Errorf(
@@ -726,7 +724,7 @@ func (dev *Device) initRun() error {
 		dev.cfg.daq.delta,
 		dev.cfg.hr.rshaper,
 		dev.cfg.daq.rfm,
-		dev.run,
+		run,
 	)
 	err = f.Close()
 	if err != nil {
@@ -736,8 +734,8 @@ func (dev *Device) initRun() error {
 		)
 	}
 
-	dev.msg.Printf("-----------------RUN NB %d-----------------\n", dev.run)
-	fname = path.Join(dev.dir, fmt.Sprintf("hr_sc_%03d.csv", dev.run))
+	dev.msg.Printf("-----------------RUN NB %d-----------------\n", run)
+	fname = path.Join(dev.dir, fmt.Sprintf("hr_sc_%03d.csv", run))
 	err = dev.hrscWriteConfHRs(fname)
 	if err != nil {
 		return fmt.Errorf(

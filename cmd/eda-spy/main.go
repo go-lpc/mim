@@ -15,7 +15,7 @@ import (
 )
 
 func main() {
-	dev, err := eda.NewDevice("/dev/mem", 0, "")
+	dev, err := eda.NewDevice("/dev/mem", "")
 	if err != nil {
 		log.Fatalf("could open device: %+v", err)
 	}

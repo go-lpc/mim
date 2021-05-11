@@ -64,7 +64,7 @@ func TestStandalone(t *testing.T) {
 
 	fdev.fpga(srv.dev, rfmID, rfmDone, exhaust)
 
-	err = srv.run()
+	err = srv.runDAQ()
 	if err != nil {
 		t.Fatalf("could run standalone server: %+v", err)
 	}

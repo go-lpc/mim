@@ -226,9 +226,8 @@ loop:
 				srv.reply(conn, err)
 				continue
 			}
-			dev.run = uint32(run)
 
-			err = dev.Start()
+			err = dev.Start(uint32(run))
 			srv.reply(conn, err)
 			if err != nil {
 				srv.msg.Printf("could not start EDA device: %+v", err)

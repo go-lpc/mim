@@ -111,7 +111,7 @@ func TestRun(t *testing.T) {
 			defer fdev.close()
 
 			dev, err := NewDevice(
-				fdev.mem, 42, fdev.tmpdir,
+				fdev.mem, fdev.tmpdir,
 				WithDevSHM(fdev.shm),
 				WithCtlAddr(""),
 				WithConfigDir("./testdata"),
@@ -141,7 +141,7 @@ func TestRun(t *testing.T) {
 				t.Fatalf("could not initialize device: %+v", err)
 			}
 
-			err = dev.Start()
+			err = dev.Start(42)
 			if err != nil {
 				t.Fatalf("could not start run: %+v", err)
 			}
@@ -166,7 +166,7 @@ func TestDumpRegisters(t *testing.T) {
 	}
 	defer fdev.close()
 
-	dev, err := NewDevice(fdev.mem, 42, fdev.tmpdir,
+	dev, err := NewDevice(fdev.mem, fdev.tmpdir,
 		WithDevSHM(fdev.shm),
 		WithConfigDir("./testdata"),
 	)
@@ -294,7 +294,7 @@ func TestDumpFIFOStatus(t *testing.T) {
 			}
 			defer fdev.close()
 
-			dev, err := NewDevice(fdev.mem, 42, fdev.tmpdir,
+			dev, err := NewDevice(fdev.mem, fdev.tmpdir,
 				WithDevSHM(fdev.shm),
 				WithConfigDir("./testdata"),
 			)
@@ -368,7 +368,7 @@ func TestDumpConfig(t *testing.T) {
 			}
 			defer fdev.close()
 
-			dev, err := NewDevice(fdev.mem, 42, fdev.tmpdir,
+			dev, err := NewDevice(fdev.mem, fdev.tmpdir,
 				WithDevSHM(fdev.shm),
 				WithConfigDir("./testdata"),
 			)
@@ -428,7 +428,7 @@ func TestNewDevice(t *testing.T) {
 			}
 			defer fdev.close()
 
-			dev, err := NewDevice(fdev.mem, 42, fdev.tmpdir,
+			dev, err := NewDevice(fdev.mem, fdev.tmpdir,
 				WithDevSHM(fdev.shm),
 				WithCtlAddr(tc.ctl),
 				WithConfigDir("./testdata"),

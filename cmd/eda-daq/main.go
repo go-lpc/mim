@@ -80,7 +80,7 @@ func run(run, threshold, rshaper, rfm uint32, srvAddr, odir, devmem, devshm, cfg
 	defer signal.Stop(stop)
 
 	dev, err := eda.NewDevice(
-		devmem, run, odir,
+		devmem, odir,
 		eda.WithCtlAddr(":8877"),
 		eda.WithThreshold(threshold),
 		eda.WithRShaper(rshaper),
@@ -117,7 +117,7 @@ func run(run, threshold, rshaper, rfm uint32, srvAddr, odir, devmem, devshm, cfg
 		}
 	}
 
-	err = dev.Start()
+	err = dev.Start(run)
 	if err != nil {
 		return fmt.Errorf("could not start EDA device: %w", err)
 	}

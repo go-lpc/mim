@@ -17,6 +17,7 @@ import (
 
 type standalone struct {
 	dev  *Device
+	run  uint32
 	stop chan os.Signal
 }
 
@@ -26,9 +27,9 @@ func newStandalone(odir, devmem, devshm, cfgdir string, run int, opts ...Option)
 		return nil, fmt.Errorf("could not create EDA device: %w", err)
 	}
 	dev.id = 1
-	dev.run = uint32(run)
 	srv := &standalone{
 		dev:  dev,
+		run:  uint32(run),
 		stop: make(chan os.Signal, 1),
 	}
 	return srv, nil
@@ -53,10 +54,10 @@ func RunStandalone(cfg string, run, threshold, rfmMask int, opts ...Option) erro
 	if err != nil {
 		return fmt.Errorf("could not create standalone server: %w", err)
 	}
-	return srv.run()
+	return srv.runDAQ()
 }
 
-func (srv *standalone) run() error {
+func (srv *standalone) runDAQ() error {
 	dev := srv.dev
 	defer dev.Close()
 
@@ -120,7 +121,7 @@ func (srv *standalone) run() error {
 
 	// --- init run ---
 	out, err := os.Create(filepath.Join(
-		dev.cfg.run.dir, fmt.Sprintf("hr_daq_%03d.bin", dev.run),
+		dev.cfg.run.dir, fmt.Sprintf("hr_daq_%03d.bin", srv.run),
 	))
 	if err != nil {
 		return fmt.Errorf("eda: could not create output DAQ file: %w", err)
