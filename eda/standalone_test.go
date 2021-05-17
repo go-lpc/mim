@@ -42,8 +42,9 @@ func TestStandalone(t *testing.T) {
 	)
 
 	srv, err := newStandalone(
-		odir, fdev.mem, fdev.shm, cfgdir, 42,
+		odir, fdev.mem, fdev.shm, 42,
 		WithRFMMask(1<<1),
+		WithConfigDir(cfgdir),
 	)
 	if err != nil {
 		t.Fatalf("could not create standalone server: %+v", err)

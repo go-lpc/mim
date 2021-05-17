@@ -26,23 +26,22 @@ type server struct {
 	odir   string
 	devmem string
 	devshm string
-	cfgdir string
 
-	newDevice func(devmem, odir, devshm, cfgdir string, opts ...Option) (device, error)
+	newDevice func(devmem, odir, devshm string, opts ...Option) (device, error)
 
 	opts []Option
 	dev  device
 }
 
-func Serve(addr, odir, devmem, devshm, cfgdir string) error {
-	srv, err := newServer(addr, odir, devmem, devshm, cfgdir)
+func Serve(addr, odir, devmem, devshm string, opts ...Option) error {
+	srv, err := newServer(addr, odir, devmem, devshm, opts...)
 	if err != nil {
 		return fmt.Errorf("could not create eda server: %w", err)
 	}
 	return srv.serve()
 }
 
-func newServer(addr, odir, devmem, devshm, cfgdir string, opts ...Option) (*server, error) {
+func newServer(addr, odir, devmem, devshm string, opts ...Option) (*server, error) {
 	ctl, err := net.Listen("tcp", addr)
 	if err != nil {
 		return nil, fmt.Errorf("could not create eda-ctl server on %q: %w", addr, err)
@@ -56,10 +55,9 @@ func newServer(addr, odir, devmem, devshm, cfgdir string, opts ...Option) (*serv
 		odir:   odir,
 		devmem: devmem,
 		devshm: devshm,
-		cfgdir: cfgdir,
 
-		newDevice: func(devmem, odir, devshm, cfgdir string, opts ...Option) (device, error) {
-			return newDevice(devmem, odir, devshm, cfgdir, opts...)
+		newDevice: func(devmem, odir, devshm string, opts ...Option) (device, error) {
+			return newDevice(devmem, odir, devshm, opts...)
 		},
 
 		opts: opts,
@@ -91,7 +89,7 @@ func (srv *server) handle(conn net.Conn) error {
 
 	srv.dev = nil
 	dev, err := srv.newDevice(
-		srv.devmem, srv.odir, srv.devshm, srv.cfgdir,
+		srv.devmem, srv.odir, srv.devshm,
 		srv.opts...,
 	)
 	if err != nil {

@@ -21,8 +21,8 @@ type standalone struct {
 	stop chan os.Signal
 }
 
-func newStandalone(odir, devmem, devshm, cfgdir string, run int, opts ...Option) (*standalone, error) {
-	dev, err := newDevice(devmem, odir, devshm, cfgdir, opts...)
+func newStandalone(odir, devmem, devshm string, run int, opts ...Option) (*standalone, error) {
+	dev, err := newDevice(devmem, odir, devshm, opts...)
 	if err != nil {
 		return nil, fmt.Errorf("could not create EDA device: %w", err)
 	}
@@ -45,12 +45,11 @@ func RunStandalone(cfg string, run, threshold, rfmMask int, opts ...Option) erro
 	xopts := []Option{
 		WithThreshold(uint32(threshold)),
 		WithRFMMask(uint32(rfmMask)),
+		WithConfigDir(cfg),
 	}
 	xopts = append(xopts, opts...)
 
-	srv, err := newStandalone(odir, devmem, devshm, cfg, run,
-		xopts...,
-	)
+	srv, err := newStandalone(odir, devmem, devshm, run, xopts...)
 	if err != nil {
 		return fmt.Errorf("could not create standalone server: %w", err)
 	}
