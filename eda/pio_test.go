@@ -7,6 +7,7 @@ package eda
 import (
 	"bytes"
 	"fmt"
+	"io"
 	"io/ioutil"
 	"log"
 	"net"
@@ -798,7 +799,8 @@ func TestDAQSendDIFData(t *testing.T) {
 				p1, p2 := net.Pipe()
 				go func() {
 					defer p2.Close()
-					_, _ = p2.Read(make([]byte, 8))
+					_, _ = io.ReadFull(p2, make([]byte, 8))
+					_, _ = p2.Write([]byte("ACK\x00"))
 				}()
 				return p1
 			},
@@ -810,21 +812,36 @@ func TestDAQSendDIFData(t *testing.T) {
 				p1, p2 := net.Pipe()
 				go func() {
 					defer p2.Close()
-					_, _ = p2.Read(make([]byte, 8))
-					_, _ = p2.Read(make([]byte, 66))
+					_, _ = io.ReadFull(p2, make([]byte, 8))
+					_, _ = p2.Write([]byte("ACK\x00"))
+					_, _ = io.ReadFull(p2, make([]byte, 66))
 				}()
 				return p1
 			},
 			err: fmt.Errorf("eda: could not read ACK DIF data from pipe: EOF"),
 		},
 		{
-			name: "invalid-ack",
+			name: "invalid-hdr-ack",
 			conn: func() net.Conn {
 				p1, p2 := net.Pipe()
 				go func() {
 					defer p2.Close()
-					_, _ = p2.Read(make([]byte, 8))
-					_, _ = p2.Read(make([]byte, 66))
+					_, _ = io.ReadFull(p2, make([]byte, 8))
+					_, _ = p2.Write([]byte("ACQ\x00"))
+				}()
+				return p1
+			},
+			err: fmt.Errorf("eda: invalid ACK DIF header from pipe: \"ACQ\\x00\""),
+		},
+		{
+			name: "invalid-data-ack",
+			conn: func() net.Conn {
+				p1, p2 := net.Pipe()
+				go func() {
+					defer p2.Close()
+					_, _ = io.ReadFull(p2, make([]byte, 8))
+					_, _ = p2.Write([]byte("ACK\x00"))
+					_, _ = io.ReadFull(p2, make([]byte, 66))
 					_, _ = p2.Write([]byte("ACQ\x00"))
 				}()
 				return p1
@@ -833,7 +850,6 @@ func TestDAQSendDIFData(t *testing.T) {
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			buf := make([]byte, 8)
 			dev := &Device{
 				msg: log.New(ioutil.Discard, "eda: ", 0),
 				buf: make([]byte, 4),
@@ -845,10 +861,11 @@ func TestDAQSendDIFData(t *testing.T) {
 						p: make([]byte, daqBufferSize),
 						c: 66,
 					},
+					buf: make([]byte, 8),
 					sck: sck,
 				},
 			}
-			err := dev.daqSendDIFData(0, buf)
+			err := dev.daqSendDIFData(0)
 			switch {
 			case err == nil && tc.err == nil:
 				// ok.

@@ -26,10 +26,9 @@ func TestServerFail(t *testing.T) {
 		odir   = ""
 		devmem = "/dev/mem"
 		devshm = "/dev/shm"
-		cfgdir = ""
 	)
 
-	err := Serve(addr, odir, devmem, devshm, cfgdir)
+	err := Serve(addr, odir, devmem, devshm)
 	if err == nil {
 		t.Fatal("expected an error")
 	}
@@ -43,8 +42,7 @@ func TestServer(t *testing.T) {
 	defer fdev.close()
 
 	var (
-		odir   = fdev.tmpdir
-		cfgdir = ""
+		odir = fdev.tmpdir
 	)
 
 	addr, err := getTCPPort()
@@ -54,15 +52,15 @@ func TestServer(t *testing.T) {
 	addr = "localhost:" + addr
 
 	srv, err := newServer(
-		addr, odir, fdev.mem, fdev.shm, cfgdir,
+		addr, odir, fdev.mem, fdev.shm,
 		func(dev *Device) { dev.cfg.mode = "db" },
 		WithRFMMask(1<<1), // dummy
 	)
 	if err != nil {
 		t.Fatal(err)
 	}
-	srv.newDevice = func(devmem, odir, devshm, cfgdir string, opts ...Option) (device, error) {
-		return newDevice(devmem, odir, devshm, cfgdir, opts...)
+	srv.newDevice = func(devmem, odir, devshm string, opts ...Option) (device, error) {
+		return newDevice(devmem, odir, devshm, opts...)
 	}
 
 	quit := make(chan int)
@@ -97,7 +95,7 @@ func TestServer(t *testing.T) {
 				case <-quit:
 					return
 				default:
-					_, err := conn.Read(buf[:8])
+					_, err := io.ReadFull(conn, buf[:8])
 					if err != nil {
 						if errors.Is(err, io.EOF) {
 							return
@@ -105,11 +103,18 @@ func TestServer(t *testing.T) {
 						t.Errorf("could not read DAQ DIF header: %+v", err)
 						continue
 					}
+					copy(buf[:4], "ACK\x00")
+					_, err = conn.Write(buf[:4])
+					if err != nil {
+						t.Errorf("could not send back ACK: %+v", err)
+						continue
+					}
+
 					size := binary.LittleEndian.Uint32(buf[4:8])
 					if size == 0 {
 						continue
 					}
-					_, err = conn.Read(buf[:size])
+					_, err = io.ReadFull(conn, buf[:size])
 					if err != nil {
 						t.Errorf("could not read DAQ DIF data: %+v", err)
 						continue

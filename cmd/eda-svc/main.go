@@ -18,7 +18,7 @@ func main() {
 
 		devmem = flag.String("dev-mem", "/dev/mem", "")
 		devshm = flag.String("dev-shm", "/dev/shm", "")
-		cfgdir = flag.String("cfg-dir", "/dev/shm/config_base", "")
+		daq    = flag.String("mode", "dcc", "dcc/inj/noise run mode")
 	)
 
 	log.SetPrefix("eda-ctl: ")
@@ -26,7 +26,7 @@ func main() {
 
 	flag.Parse()
 
-	err := eda.Serve(*addr, *odir, *devmem, *devshm, *cfgdir)
+	err := eda.Serve(*addr, *odir, *devmem, *devshm, eda.WithDAQMode(*daq))
 	if err != nil {
 		log.Fatalf("could not create eda-ctl service: %+v", err)
 	}

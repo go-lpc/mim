@@ -48,7 +48,7 @@ func TestRun(t *testing.T) {
 				case <-done:
 					return
 				default:
-					_, err := conn.Read(buf[:8])
+					_, err := io.ReadFull(conn, buf[:8])
 					if err != nil {
 						if errors.Is(err, io.EOF) {
 							return
@@ -56,11 +56,17 @@ func TestRun(t *testing.T) {
 						t.Errorf("could not read DAQ DIF header: %+v", err)
 						continue
 					}
+					copy(buf[:4], "ACK\x00")
+					_, err = conn.Write(buf[:4])
+					if err != nil {
+						t.Errorf("could not send back ACK: %+v", err)
+						continue
+					}
 					size := binary.LittleEndian.Uint32(buf[4:8])
 					if size == 0 {
 						continue
 					}
-					_, err = conn.Read(buf[:size])
+					_, err = io.ReadFull(conn, buf[:size])
 					if err != nil {
 						t.Errorf("could not read DAQ DIF data: %+v", err)
 						continue

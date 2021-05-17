@@ -1829,40 +1829,43 @@ func difIDFrom(id uint32, rfm int) byte {
 	return difIDOffset + byte(id&7)<<3 + byte(rfm)&3
 }
 
-func (dev *Device) daqWriteDIFData(w io.Writer, rfm int) {
+func (dev *Device) daqWriteDIFData(w io.Writer, slot int) {
 	var (
-		wU8 = func(v uint8) {
-			dev.buf[0] = v
-			_, _ = w.Write(dev.buf[:1])
+		rfm  = &dev.daq.rfm[slot]
+		fifo = &dev.regs.fifo.daq[slot]
+		wU8  = func(v uint8) {
+			rfm.buf[0] = v
+			_, _ = w.Write(rfm.buf[:1])
 		}
 		wU16 = func(v uint16) {
-			binary.BigEndian.PutUint16(dev.buf[:2], v)
-			_, _ = w.Write(dev.buf[:2])
+			binary.BigEndian.PutUint16(rfm.buf[:2], v)
+			_, _ = w.Write(rfm.buf[:2])
 		}
 		wU32 = func(v uint32) {
-			binary.BigEndian.PutUint32(dev.buf[:4], v)
-			_, _ = w.Write(dev.buf[:4])
+			binary.BigEndian.PutUint32(rfm.buf[:4], v)
+			_, _ = w.Write(rfm.buf[:4])
 		}
 	)
 
 	// offset
-	if dev.daq.cycleID[rfm] == 0 {
-		dev.daq.bcid48Offset = dev.cntBCID48LSB() - dev.cntBCID24()
+	if rfm.cycle == 0 {
+		rfm.bcid = dev.cntBCID48LSB() - dev.cntBCID24()
 	}
+	bcid48Offset := rfm.bcid
 
 	// DIF DAQ header
 	wU8(0xB0)
-	wU8(dev.difs[rfm])
+	wU8(dev.difs[slot])
 	// counters
-	wU32(dev.daq.cycleID[rfm] + 1) // FIXME(sbinet): off-by-one ?
-	wU32(dev.cntHit0(rfm))
+	wU32(rfm.cycle + 1) // FIXME(sbinet): off-by-one ?
+	wU32(dev.cntHit0(slot))
 	//wU32(dev.cntHit1(rfm)) // FIXME(sbinet): hack
-	wU32(dev.daq.cycleID[rfm] + 1) // FIXME(sbinet): hack (and off-by-one?)
+	wU32(rfm.cycle + 1) // FIXME(sbinet): hack (and off-by-one?)
 	// assemble and correct absolute BCID
 	bcid48 := uint64(dev.cntBCID48MSB())
 	bcid48 <<= 32
 	bcid48 |= uint64(dev.cntBCID48LSB())
-	bcid48 -= uint64(dev.daq.bcid48Offset)
+	bcid48 -= uint64(bcid48Offset)
 	// copy frame
 	wU16(uint16(bcid48>>32) & 0xffff)
 	wU32(uint32(bcid48))
@@ -1880,11 +1883,11 @@ func (dev *Device) daqWriteDIFData(w io.Writer, rfm int) {
 	wU8(0xB4) // HR header
 
 	const nWordsPerHR = 5
-	n := int(dev.daqFIFOFillLevel(rfm) / nWordsPerHR)
+	n := int(dev.daqFIFOFillLevel(slot) / nWordsPerHR)
 
 	for i := 0; i < n; i++ {
 		// read HR ID
-		id := dev.regs.fifo.daq[rfm].r()
+		id := fifo.r()
 		hrID = int(id >> 24)
 		// insert trailer and header if new hardroc ID
 		if hrID != lastHR {
@@ -1894,22 +1897,23 @@ func (dev *Device) daqWriteDIFData(w io.Writer, rfm int) {
 			}
 		}
 		wU32(id)
-		wU32(dev.regs.fifo.daq[rfm].r())
-		wU32(dev.regs.fifo.daq[rfm].r())
-		wU32(dev.regs.fifo.daq[rfm].r())
-		wU32(dev.regs.fifo.daq[rfm].r())
+		wU32(fifo.r())
+		wU32(fifo.r())
+		wU32(fifo.r())
+		wU32(fifo.r())
 		lastHR = hrID
 	}
 	wU8(0xA3)    // last HR trailer
 	wU8(0xA0)    // DIF DAQ trailer
 	wU16(0xC0C0) // fake CRC
 
-	dev.daq.cycleID[rfm]++
+	rfm.cycle++
 }
 
-func (dev *Device) daqSendDIFData(i int, buf []byte) error {
+func (dev *Device) daqSendDIFData(i int) error {
 	var (
 		sink = &dev.daq.rfm[i]
+		buf  = sink.buf
 		w    = sink.w
 		sck  = sink.sck
 	)
@@ -1936,14 +1940,34 @@ func (dev *Device) daqSendDIFData(i int, buf []byte) error {
 		)
 	}
 
-	if cur > 0 {
-		_, err = sck.Write(w.p[:cur])
-		if err != nil {
-			return errorf(
-				"eda: could not send DIF data to %v: %w",
-				sck.RemoteAddr(), err,
-			)
-		}
+	// wait for ACK
+	_, err = io.ReadFull(sck, hdr[:4])
+	if err != nil {
+		return errorf(
+			"eda: could not read ACK DIF header from %v: %+v",
+			sck.RemoteAddr(), err,
+		)
+	}
+	if string(hdr[:4]) != "ACK\x00" {
+		return errorf(
+			"eda: invalid ACK DIF header from %v: %q",
+			sck.RemoteAddr(), hdr[:4],
+		)
+	}
+
+	if cur == 0 {
+		return nil
+	}
+
+	_, err = sck.Write(w.p[:cur])
+	if err != nil {
+		return errorf(
+			"eda: could not send DIF data to %v: %w",
+			sck.RemoteAddr(), err,
+		)
+	}
+
+	if false {
 		_, _ = dev.daq.f.Write(w.p[:cur])
 		dec := eformat.NewDecoder(dev.difs[sink.slot], bytes.NewReader(w.p[:cur]))
 		dec.IsEDA = true

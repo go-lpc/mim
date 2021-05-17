@@ -23,6 +23,7 @@ func newDbConfig() dbConfig {
 }
 
 func (dev *Device) setDBConfig(dif uint8, asics []conddb.ASIC) {
+	dev.cfg.mode = "db"
 	dev.cfg.hr.db.asics[dif] = make([]conddb.ASIC, len(asics))
 	copy(dev.cfg.hr.db.asics[dif], asics)
 }

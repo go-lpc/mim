@@ -37,6 +37,8 @@ const (
 	nChans      = 64
 
 	daqBufferSize = nRFM * (26 + nHR*(2+128*20))
+
+	nHdr = 8 // 'HDR\0+u32'
 )
 
 const (
@@ -112,6 +114,7 @@ type Device struct {
 		}
 
 		daq struct {
+			mode  string // dcc, noise or inj
 			fname string
 			floor [nRFM * nHR * 3]uint32
 			delta uint32 // delta threshold
@@ -138,9 +141,6 @@ type Device struct {
 	}
 
 	daq struct {
-		cycleID      [nRFM]uint32
-		bcid48Offset uint32
-
 		rfm []rfmSink // DIF data sink, one per RFM
 
 		done chan int // signal to stop daq
@@ -150,11 +150,16 @@ type Device struct {
 }
 
 type rfmSink struct {
-	id   uint8 // RFM/DIF ID
-	slot int   // EDA slot
-	w    *wbuf
-	sck  net.Conn
+	id    uint8 // RFM/DIF ID
+	slot  int   // EDA slot
+	w     *wbuf
+	buf   []byte
+	cycle uint32
+	bcid  uint32 // BCID48 offset
+	sck   net.Conn
 }
+
+func (sink *rfmSink) valid() bool { return sink.id != 0 }
 
 type Option func(*Device)
 
@@ -207,13 +212,20 @@ func WithConfigDir(dir string) Option {
 	}
 }
 
+func WithDAQMode(mode string) Option {
+	return func(dev *Device) {
+		dev.cfg.daq.mode = mode
+		dev.msg.Printf("using daq mode=%q", mode)
+	}
+}
+
 func WithResetBCID(timeout time.Duration) Option {
 	return func(dev *Device) {
 		dev.cfg.daq.timeout = timeout
 	}
 }
 
-func newDevice(devmem, odir, devshm, cfgdir string, opts ...Option) (*Device, error) {
+func newDevice(devmem, odir, devshm string, opts ...Option) (*Device, error) {
 	mem, err := os.OpenFile(devmem, os.O_RDWR|os.O_SYNC, 0666)
 	if err != nil {
 		return nil, fmt.Errorf("eda: could not open %q: %w", devmem, err)
@@ -233,11 +245,11 @@ func newDevice(devmem, odir, devshm, cfgdir string, opts ...Option) (*Device, er
 	dev.cfg.mode = "db"
 	dev.cfg.hr.db = newDbConfig()
 	dev.cfg.hr.cshaper = 3
-	WithResetBCID(10 * time.Second)(dev)
-	WithConfigDir(cfgdir)(dev)
-	WithDevSHM(devshm)(dev)
-
+	dev.cfg.daq.mode = "dcc"
 	dev.cfg.hr.data = dev.cfg.hr.buf[4:]
+
+	WithResetBCID(10 * time.Second)(dev)
+	WithDevSHM(devshm)(dev)
 
 	for _, opt := range opts {
 		opt(dev)
@@ -246,7 +258,9 @@ func newDevice(devmem, odir, devshm, cfgdir string, opts ...Option) (*Device, er
 	// setup RFMs indices from provided mask
 	dev.rfms = nil
 	dev.difs = make(map[int]uint8, nRFM)
+	dev.daq.rfm = make([]rfmSink, nRFM)
 	for i := 0; i < nRFM; i++ {
+		dev.daq.rfm[i].buf = make([]byte, nHdr)
 		if (dev.cfg.daq.rfm>>i)&1 == 1 {
 			dev.rfms = append(dev.rfms, i)
 			dev.difs[i] = difIDFrom(dev.id, i)
@@ -274,7 +288,6 @@ func newDevice(devmem, odir, devshm, cfgdir string, opts ...Option) (*Device, er
 	}()
 
 	return dev, nil
-
 }
 
 func NewDevice(fname string, odir string, opts ...Option) (*Device, error) {
@@ -294,13 +307,14 @@ func NewDevice(fname string, odir string, opts ...Option) (*Device, error) {
 		buf: make([]byte, 4),
 	}
 	dev.mem.fd = mem
-	dev.cfg.mode = "db"
-	dev.cfg.hr.db = newDbConfig()
-	dev.cfg.hr.cshaper = 3
 	WithResetBCID(10 * time.Second)(dev)
 	WithConfigDir("/dev/shm/config_base")(dev)
 	WithDevSHM("/dev/shm")(dev)
 
+	dev.cfg.mode = "db"
+	dev.cfg.hr.db = newDbConfig()
+	dev.cfg.hr.cshaper = 3
+	dev.cfg.daq.mode = "dcc"
 	dev.cfg.hr.data = dev.cfg.hr.buf[4:]
 
 	for _, opt := range opts {
@@ -309,7 +323,9 @@ func NewDevice(fname string, odir string, opts ...Option) (*Device, error) {
 
 	// setup RFMs indices from provided mask
 	dev.rfms = nil
+	dev.daq.rfm = make([]rfmSink, nRFM)
 	for i := 0; i < nRFM; i++ {
+		dev.daq.rfm[i].buf = make([]byte, nHdr)
 		if (dev.cfg.daq.rfm>>i)&1 == 1 {
 			dev.rfms = append(dev.rfms, i)
 		}
@@ -371,18 +387,14 @@ func (dev *Device) ConfigureDIF(addr string, dif uint8, asics []conddb.ASIC) err
 }
 
 func (dev *Device) Configure() error {
-	if dev.cfg.mode == "csv" {
-		return dev.configureFromCSV()
+	if dev.cfg.mode != "csv" {
+		return fmt.Errorf(
+			"eda: configure called w/ invalid cfg-mode %q (want %q)",
+			dev.cfg.mode, "csv",
+		)
 	}
 
-	//	for _, rfm := range dev.difs {
-	//		err := dev.configASICs(rfm)
-	//		if err != nil {
-	//			return fmt.Errorf("eda: could not configure HR for rfm=%d: %w", rfm, err)
-	//		}
-	//	}
-
-	return nil
+	return dev.configureFromCSV()
 }
 
 func (dev *Device) configureFromCSV() error {
@@ -411,7 +423,6 @@ func (dev *Device) configureFromCSV() error {
 
 func (dev *Device) Initialize() error {
 	if len(dev.cfg.daq.addrs) != 0 {
-		dev.daq.rfm = make([]rfmSink, len(dev.rfms))
 		dev.msg.Printf("initialize rfm sinks: %v", dev.rfms)
 		for i := range dev.rfms {
 			dev.serveRFM(i, dev.cfg.daq.addrs[i])
@@ -469,17 +480,29 @@ func (dev *Device) initFPGA() error {
 	}
 	dev.msg.Printf("control pio=0x%x\n", ctrl)
 
-	err = dev.syncSelectCmdDCC()
-	if err != nil {
-		return fmt.Errorf("eda: could not select DCC cmd: %w", err)
-	}
-	err = dev.syncEnableDCCBusy()
-	if err != nil {
-		return fmt.Errorf("eda: could not enable DCC busy: %w", err)
-	}
-	err = dev.syncEnableDCCRAMFull()
-	if err != nil {
-		return fmt.Errorf("eda: could not enable DCC RAM-full: %w", err)
+	dev.msg.Printf("trigger mode: %v", dev.cfg.daq.mode)
+	switch dev.cfg.daq.mode {
+	case "dcc":
+		err = dev.syncSelectCmdDCC()
+		if err != nil {
+			return fmt.Errorf("eda: could not select DCC cmd: %w", err)
+		}
+		err = dev.syncEnableDCCBusy()
+		if err != nil {
+			return fmt.Errorf("eda: could not enable DCC busy: %w", err)
+		}
+		err = dev.syncEnableDCCRAMFull()
+		if err != nil {
+			return fmt.Errorf("eda: could not enable DCC RAM-full: %w", err)
+		}
+	case "noise":
+		err = dev.syncSelectCmdSoft()
+		if err != nil {
+			return fmt.Errorf("eda: could not select SOFT cmd: %w", err)
+		}
+
+	default:
+		return fmt.Errorf("eda: invalid trigger mode: %v", dev.cfg.daq.mode)
 	}
 
 	return nil
@@ -498,14 +521,6 @@ func (dev *Device) initHRFromDB() error {
 
 	dev.hrscSetRShaper(0, dev.cfg.hr.rshaper)
 	dev.hrscSetCShaper(0, dev.cfg.hr.cshaper)
-
-	dev.hrscCopyConf(1, 0)
-	dev.hrscCopyConf(2, 0)
-	dev.hrscCopyConf(3, 0)
-	dev.hrscCopyConf(4, 0)
-	dev.hrscCopyConf(5, 0)
-	dev.hrscCopyConf(6, 0)
-	dev.hrscCopyConf(7, 0)
 
 	// set chip IDs
 	for hr := uint32(0); hr < nHR; hr++ {
@@ -683,6 +698,25 @@ func (dev *Device) initHRFromCSV() error {
 }
 
 func (dev *Device) Start(run uint32) error {
+	err := dev.initRun(run)
+	if err != nil {
+		return fmt.Errorf("eda: could not init run: %w", err)
+	}
+
+	switch dev.cfg.daq.mode {
+	case "dcc":
+		return dev.startRunDCC(run)
+	case "noise":
+		return dev.startRunNoise(run)
+	default:
+		err := fmt.Errorf("eda: unknown trig-mode %q", dev.cfg.daq.mode)
+		dev.msg.Printf("%+v", err)
+		return err
+	}
+}
+
+func (dev *Device) startRunDCC(run uint32) error {
+	var err error
 	resetBCID := make(chan uint32)
 	go func() {
 		var dccCmd uint32 = 0xe
@@ -693,11 +727,6 @@ func (dev *Device) Start(run uint32) error {
 		dev.msg.Printf("launching reset-BCID goroutine... [done: v=0x%x]", dccCmd)
 		resetBCID <- dccCmd
 	}()
-
-	err := dev.initRun(run)
-	if err != nil {
-		return fmt.Errorf("eda: could not init run: %w", err)
-	}
 
 	dev.msg.Printf("waiting for reset-BCID...")
 	timer := time.NewTimer(dev.cfg.daq.timeout)
@@ -732,6 +761,41 @@ func (dev *Device) Start(run uint32) error {
 		if err != nil {
 			return fmt.Errorf("eda: could not initialize DAQ FIFO (RFM=%d): %w", rfm, err)
 		}
+	}
+
+	err = dev.syncArmFIFO()
+	if err != nil {
+		return fmt.Errorf("eda: could not arm FIFO: %w", err)
+	}
+
+	dev.daq.done = make(chan int)
+
+	go dev.loop()
+	return nil
+}
+
+func (dev *Device) startRunNoise(run uint32) error {
+	var err error
+	for _, rfm := range dev.rfms {
+		err = dev.daqFIFOInit(rfm)
+		if err != nil {
+			return fmt.Errorf("eda: could not initialize DAQ FIFO (RFM=%d): %w", rfm, err)
+		}
+	}
+
+	err = dev.cntReset()
+	if err != nil {
+		return fmt.Errorf("eda: could not reset counters: %w", err)
+	}
+
+	err = dev.syncResetBCID()
+	if err != nil {
+		return fmt.Errorf("eda: could not reset BCID: %w", err)
+	}
+
+	err = dev.syncStart()
+	if err != nil {
+		return fmt.Errorf("eda: could not start acquisition: %w", err)
 	}
 
 	err = dev.syncArmFIFO()
@@ -816,6 +880,18 @@ func (dev *Device) serveRFM(i int, addr string) {
 }
 
 func (dev *Device) loop() {
+	switch dev.cfg.daq.mode {
+	case "dcc":
+		dev.loopDCC()
+	case "noise":
+		dev.loopNoise()
+	default:
+		err := fmt.Errorf("eda: invalid trig-mode %q", dev.cfg.daq.mode)
+		panic(err)
+	}
+}
+
+func (dev *Device) loopDCC() {
 	var (
 		w      = dev.msg.Writer()
 		printf = fmt.Fprintf
@@ -823,7 +899,6 @@ func (dev *Device) loop() {
 			dev.err = fmt.Errorf(format, args...)
 			dev.msg.Printf("%+v", dev.err)
 		}
-		buf   = make([]byte, 8)
 		cycle int
 		err   error
 	)
@@ -888,9 +963,12 @@ func (dev *Device) loop() {
 		printf(w, "tx-")
 		var grp errgroup.Group
 		for i := range dev.daq.rfm {
+			if !dev.daq.rfm[i].valid() {
+				continue
+			}
 			ii := i
 			grp.Go(func() error {
-				err := dev.daqSendDIFData(ii, buf)
+				err := dev.daqSendDIFData(ii)
 				if err != nil {
 					errorf("eda: could not send DIF data (RFM=%d): %w", dev.rfms[ii], err)
 					return err
@@ -916,6 +994,126 @@ func (dev *Device) loop() {
 	}
 }
 
+func (dev *Device) loopNoise() {
+	var (
+		w      = dev.msg.Writer()
+		printf = fmt.Fprintf
+		errorf = func(format string, args ...interface{}) {
+			dev.err = fmt.Errorf(format, args...)
+			dev.msg.Printf("%+v", dev.err)
+		}
+		cycle int
+		err   error
+	)
+
+	if len(dev.daq.rfm) != 0 {
+		for i := range dev.daq.rfm {
+			rfm := &dev.daq.rfm[i]
+			if !rfm.valid() {
+				continue
+			}
+			defer rfm.sck.Close()
+		}
+	}
+
+	for i := range dev.daq.rfm {
+		rfm := &dev.daq.rfm[i]
+		rfm.w = &wbuf{
+			p: make([]byte, daqBufferSize),
+		}
+	}
+
+	for {
+		printf(w, "trigger %07d, state: acq-", cycle)
+		// wait until readout is done
+	readout:
+		for {
+			state := dev.syncState()
+			switch {
+			case state >= regs.S_RAMFULL:
+				break readout
+			default:
+				select {
+				case <-dev.daq.done:
+					dev.daq.done <- 1
+					return
+				default:
+				}
+			}
+		}
+		printf(w, "ramfull-")
+		err = dev.syncRAMFullExt()
+		if err != nil {
+			errorf("could not set RAMFULL: %+v", err)
+			return
+		}
+
+	dataReady:
+		for {
+			state := dev.syncState()
+			switch {
+			case state >= regs.S_FIFO_READY:
+				break dataReady
+			default:
+				select {
+				case <-dev.daq.done:
+					dev.daq.done <- 1
+					return
+				default:
+				}
+			}
+		}
+
+		printf(w, "cp-") // copy
+
+		// read hardroc data
+		for i, rfm := range dev.rfms {
+			dev.daqWriteDIFData(dev.daq.rfm[i].w, rfm)
+		}
+		err = dev.syncAckFIFO()
+		if err != nil {
+			errorf("eda: could not ACK FIFO: %w", err)
+			return
+		}
+		printf(w, "tx-")
+		var grp errgroup.Group
+		for i := range dev.daq.rfm {
+			if !dev.daq.rfm[i].valid() {
+				continue
+			}
+			ii := i
+			grp.Go(func() error {
+				err := dev.daqSendDIFData(ii)
+				if err != nil {
+					errorf("eda: could not send DIF data (RFM=%d): %w", dev.rfms[ii], err)
+					return err
+				}
+				return nil
+			})
+		}
+		err = grp.Wait()
+		if err != nil {
+			errorf("eda: could not send DIF data: %w", err)
+			return
+		}
+
+		printf(w, "\n")
+		cycle++
+
+		select {
+		case <-dev.daq.done:
+			dev.daq.done <- 1
+			return
+		default:
+			err = dev.syncStart()
+			if err != nil {
+				errorf("eda: could not start acquisition: %w", err)
+				return
+			}
+		}
+	}
+}
+
 func (dev *Device) Stop() error {
 	const timeout = 10 * time.Second
 	tck := time.NewTimer(timeout)
@@ -932,9 +1130,35 @@ func (dev *Device) Stop() error {
 		return fmt.Errorf("eda: error during DAQ: %w", dev.err)
 	}
 
-	err := dev.cntStop()
+	var err error
+	switch dev.cfg.daq.mode {
+	case "dcc":
+		err = dev.cntStop()
+		if err != nil {
+			return fmt.Errorf("eda: could not stop counters: %w", err)
+		}
+	case "noise":
+		err = dev.syncStop()
+		if err != nil {
+			return fmt.Errorf("eda: could not stop acquisition: %w", err)
+		}
+		err = dev.cntStop()
+		if err != nil {
+			return fmt.Errorf("eda: could not stop counters: %w", err)
+		}
+	}
+
+	err = dev.cntReset()
 	if err != nil {
-		return fmt.Errorf("eda: could not stop counters: %w", err)
+		return fmt.Errorf("eda: could not reset counters: %w", err)
+	}
+	err = dev.syncResetFPGA()
+	if err != nil {
+		return fmt.Errorf("eda: could not reset FPGA: %w", err)
+	}
+	err = dev.syncResetHR()
+	if err != nil {
+		return fmt.Errorf("eda: could not reset Hardroc: %w", err)
 	}
 
 	return nil
@@ -1047,7 +1271,7 @@ func (dev *Device) DumpCounters(w io.Writer, rfm int) error {
 	printf("#cycle_id;cnt_hit0;cnt_hit1;trig;")
 	printf("cnt48_msb;cnt48_lsb;cnt24\n")
 	printf("%d;%d;%d;%d;",
-		dev.daq.cycleID[rfm],
+		dev.daq.rfm[rfm].cycle,
 		dev.cntHit0(rfm),
 		dev.cntHit1(rfm),
 		dev.cntTrig(),
