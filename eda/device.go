@@ -37,7 +37,7 @@ const (
 
 	daqBufferSize = nRFM * (26 + nHR*(2+128*20))
 
-	nHdr = 8 // 'HDR\0+u32'
+	nMsgHdr = 8 // 'HDR\0+u32'
 )
 
 const (
@@ -149,7 +149,7 @@ func newDevice(devmem, odir, devshm string, opts ...Option) (*Device, error) {
 	dev.difs = make(map[int]uint8, nRFM)
 	dev.daq.rfm = make([]rfmSink, nRFM)
 	for i := 0; i < nRFM; i++ {
-		dev.daq.rfm[i].buf = make([]byte, nHdr)
+		dev.daq.rfm[i].buf = make([]byte, nMsgHdr)
 		if (dev.cfg.daq.rfm>>i)&1 == 1 {
 			dev.rfms = append(dev.rfms, i)
 			dev.difs[i] = difIDFrom(dev.id, i)
@@ -212,7 +212,7 @@ func NewDevice(fname string, odir string, opts ...Option) (*Device, error) {
 	dev.rfms = nil
 	dev.daq.rfm = make([]rfmSink, nRFM)
 	for i := 0; i < nRFM; i++ {
-		dev.daq.rfm[i].buf = make([]byte, nHdr)
+		dev.daq.rfm[i].buf = make([]byte, nMsgHdr)
 		if (dev.cfg.daq.rfm>>i)&1 == 1 {
 			dev.rfms = append(dev.rfms, i)
 		}
