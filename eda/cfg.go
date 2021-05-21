@@ -87,9 +87,6 @@ type config struct {
 		cshaper uint32 // capacity shaper
 
 		db dbConfig // configuration from tmv-db
-
-		buf  [szCfgHR]byte
-		data []byte
 	}
 
 	daq struct {
@@ -126,7 +123,6 @@ func newConfig() config {
 	cfg.hr.db = newDbConfig()
 	cfg.hr.cshaper = 3
 	cfg.daq.mode = "dcc"
-	cfg.hr.data = cfg.hr.buf[4:]
 	return cfg
 }
 
@@ -161,7 +157,7 @@ func (dev *Device) configASICs(dif uint8) error {
 			n   = len(cfg)
 		)
 		for i, v := range cfg {
-			dev.hrscSetBit(ihr, uint32(n-1-i), uint32(v))
+			dev.brd.hrscSetBit(ihr, uint32(n-1-i), uint32(v))
 		}
 	}
 	return nil
