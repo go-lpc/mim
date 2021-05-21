@@ -53,7 +53,7 @@ func TestServer(t *testing.T) {
 
 	srv, err := newServer(
 		addr, odir, fdev.mem, fdev.shm,
-		func(dev *Device) { dev.cfg.mode = "db" },
+		func(cfg *config) { cfg.mode = "db" },
 		WithRFMMask(1<<1), // dummy
 	)
 	if err != nil {

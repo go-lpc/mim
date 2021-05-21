@@ -12,7 +12,6 @@ import (
 	"net"
 	"os"
 	"path"
-	"path/filepath"
 	"strconv"
 	"time"
 
@@ -96,49 +95,7 @@ type Device struct {
 		}
 	}
 
-	cfg struct {
-		mode string // csv or db
-		ctl  struct {
-			addr string // addr+port to eda-ctl
-		}
-
-		hr struct {
-			fname   string
-			rshaper uint32 // resistance shaper
-			cshaper uint32 // capacity shaper
-
-			db dbConfig // configuration from tmv-db
-
-			buf  [szCfgHR]byte
-			data []byte
-		}
-
-		daq struct {
-			mode  string // dcc, noise or inj
-			fname string
-			floor [nRFM * nHR * 3]uint32
-			delta uint32 // delta threshold
-			rfm   uint32 // RFM ON mask
-
-			addrs []string // [addr:port]s for sending DIF data
-
-			timeout time.Duration // timeout for reset-BCID
-		}
-
-		preamp struct {
-			fname string
-			gains [nRFM * nHR * nChans]uint32
-		}
-
-		mask struct {
-			fname string
-			table [nRFM * nHR * nChans]uint32
-		}
-
-		run struct {
-			dir string
-		}
-	}
+	cfg config
 
 	daq struct {
 		rfm []rfmSink // DIF data sink, one per RFM
@@ -161,70 +118,6 @@ type rfmSink struct {
 
 func (sink *rfmSink) valid() bool { return sink.id != 0 }
 
-type Option func(*Device)
-
-func WithThreshold(v uint32) Option {
-	return func(dev *Device) {
-		dev.cfg.daq.delta = v
-	}
-}
-
-func WithRFMMask(v uint32) Option {
-	return func(dev *Device) {
-		dev.cfg.daq.rfm = v
-	}
-}
-
-func WithRShaper(v uint32) Option {
-	return func(dev *Device) {
-		dev.cfg.hr.rshaper = v
-	}
-}
-
-func WithCShaper(v uint32) Option {
-	return func(dev *Device) {
-		dev.cfg.hr.cshaper = v
-	}
-}
-
-func WithDevSHM(dir string) Option {
-	return func(dev *Device) {
-		dev.cfg.run.dir = dir
-	}
-}
-
-func WithCtlAddr(addr string) Option {
-	return func(dev *Device) {
-		dev.cfg.ctl.addr = addr
-	}
-}
-
-func WithConfigDir(dir string) Option {
-	return func(dev *Device) {
-		if dir == "" {
-			return
-		}
-		dev.cfg.mode = "csv"
-		dev.cfg.hr.fname = filepath.Join(dir, "conf_base.csv")
-		dev.cfg.daq.fname = filepath.Join(dir, "dac_floor_4rfm.csv")
-		dev.cfg.preamp.fname = filepath.Join(dir, "pa_gain_4rfm.csv")
-		dev.cfg.mask.fname = filepath.Join(dir, "mask_4rfm.csv")
-	}
-}
-
-func WithDAQMode(mode string) Option {
-	return func(dev *Device) {
-		dev.cfg.daq.mode = mode
-		dev.msg.Printf("using daq mode=%q", mode)
-	}
-}
-
-func WithResetBCID(timeout time.Duration) Option {
-	return func(dev *Device) {
-		dev.cfg.daq.timeout = timeout
-	}
-}
-
 func newDevice(devmem, odir, devshm string, opts ...Option) (*Device, error) {
 	mem, err := os.OpenFile(devmem, os.O_RDWR|os.O_SYNC, 0666)
 	if err != nil {
@@ -240,19 +133,15 @@ func newDevice(devmem, odir, devshm string, opts ...Option) (*Device, error) {
 		msg: log.New(os.Stdout, "eda: ", 0),
 		dir: odir,
 		buf: make([]byte, 4),
+		cfg: newConfig(),
 	}
 	dev.mem.fd = mem
-	dev.cfg.mode = "db"
-	dev.cfg.hr.db = newDbConfig()
-	dev.cfg.hr.cshaper = 3
-	dev.cfg.daq.mode = "dcc"
-	dev.cfg.hr.data = dev.cfg.hr.buf[4:]
 
-	WithResetBCID(10 * time.Second)(dev)
-	WithDevSHM(devshm)(dev)
+	WithResetBCID(10 * time.Second)(&dev.cfg)
+	WithDevSHM(devshm)(&dev.cfg)
 
 	for _, opt := range opts {
-		opt(dev)
+		opt(&dev.cfg)
 	}
 
 	// setup RFMs indices from provided mask
@@ -305,20 +194,18 @@ func NewDevice(fname string, odir string, opts ...Option) (*Device, error) {
 		msg: log.New(os.Stdout, "eda: ", 0),
 		dir: odir,
 		buf: make([]byte, 4),
+		cfg: newConfig(),
 	}
 	dev.mem.fd = mem
-	WithResetBCID(10 * time.Second)(dev)
-	WithConfigDir("/dev/shm/config_base")(dev)
-	WithDevSHM("/dev/shm")(dev)
+	WithResetBCID(10 * time.Second)(&dev.cfg)
+	WithConfigDir("/dev/shm/config_base")(&dev.cfg)
+	WithDevSHM("/dev/shm")(&dev.cfg)
 
 	dev.cfg.mode = "db"
-	dev.cfg.hr.db = newDbConfig()
-	dev.cfg.hr.cshaper = 3
 	dev.cfg.daq.mode = "dcc"
-	dev.cfg.hr.data = dev.cfg.hr.buf[4:]
 
 	for _, opt := range opts {
-		opt(dev)
+		opt(&dev.cfg)
 	}
 
 	// setup RFMs indices from provided mask

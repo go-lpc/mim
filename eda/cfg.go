@@ -6,9 +6,129 @@ package eda
 
 import (
 	"fmt"
+	"path/filepath"
+	"time"
 
 	"github.com/go-lpc/mim/conddb"
 )
+
+type Option func(*config)
+
+func WithThreshold(v uint32) Option {
+	return func(cfg *config) {
+		cfg.daq.delta = v
+	}
+}
+
+func WithRFMMask(v uint32) Option {
+	return func(cfg *config) {
+		cfg.daq.rfm = v
+	}
+}
+
+func WithRShaper(v uint32) Option {
+	return func(cfg *config) {
+		cfg.hr.rshaper = v
+	}
+}
+
+func WithCShaper(v uint32) Option {
+	return func(cfg *config) {
+		cfg.hr.cshaper = v
+	}
+}
+
+func WithDevSHM(dir string) Option {
+	return func(cfg *config) {
+		cfg.run.dir = dir
+	}
+}
+
+func WithCtlAddr(addr string) Option {
+	return func(cfg *config) {
+		cfg.ctl.addr = addr
+	}
+}
+
+func WithConfigDir(dir string) Option {
+	return func(cfg *config) {
+		if dir == "" {
+			return
+		}
+		cfg.mode = "csv"
+		cfg.hr.fname = filepath.Join(dir, "conf_base.csv")
+		cfg.daq.fname = filepath.Join(dir, "dac_floor_4rfm.csv")
+		cfg.preamp.fname = filepath.Join(dir, "pa_gain_4rfm.csv")
+		cfg.mask.fname = filepath.Join(dir, "mask_4rfm.csv")
+	}
+}
+
+func WithDAQMode(mode string) Option {
+	return func(cfg *config) {
+		cfg.daq.mode = mode
+	}
+}
+
+func WithResetBCID(timeout time.Duration) Option {
+	return func(cfg *config) {
+		cfg.daq.timeout = timeout
+	}
+}
+
+type config struct {
+	mode string // csv or db
+	ctl  struct {
+		addr string // addr+port to eda-ctl
+	}
+
+	hr struct {
+		fname   string
+		rshaper uint32 // resistance shaper
+		cshaper uint32 // capacity shaper
+
+		db dbConfig // configuration from tmv-db
+
+		buf  [szCfgHR]byte
+		data []byte
+	}
+
+	daq struct {
+		mode  string // dcc, noise or inj
+		fname string
+		floor [nRFM * nHR * 3]uint32
+		delta uint32 // delta threshold
+		rfm   uint32 // RFM ON mask
+
+		addrs []string // [addr:port]s for sending DIF data
+
+		timeout time.Duration // timeout for reset-BCID
+	}
+
+	preamp struct {
+		fname string
+		gains [nRFM * nHR * nChans]uint32
+	}
+
+	mask struct {
+		fname string
+		table [nRFM * nHR * nChans]uint32
+	}
+
+	run struct {
+		dir string
+	}
+}
+
+func newConfig() config {
+	cfg := config{
+		mode: "db",
+	}
+	cfg.hr.db = newDbConfig()
+	cfg.hr.cshaper = 3
+	cfg.daq.mode = "dcc"
+	cfg.hr.data = cfg.hr.buf[4:]
+	return cfg
+}
 
 // dbConfig holds the configuration from the TMVDb
 // for each of the RFMs.

@@ -81,7 +81,7 @@ func TestCompareConfig(t *testing.T) {
 }
 
 func testCfgWithDB(dev *Device, asics []conddb.ASIC, rshaper uint32, rfms []int) error {
-	WithRShaper(rshaper)(dev)
+	WithRShaper(rshaper)(&dev.cfg)
 	dev.cfg.hr.cshaper = 3
 	dev.cfg.hr.data = dev.cfg.hr.buf[4:]
 	dev.cfg.hr.db = newDbConfig()
@@ -144,9 +144,9 @@ func testCfgWithDB(dev *Device, asics []conddb.ASIC, rshaper uint32, rfms []int)
 }
 
 func testCfgWithCSV(dev *Device, thresh, rshaper uint32, rfms []int) error {
-	WithConfigDir("testdata")(dev)
-	WithThreshold(thresh)(dev)
-	WithRShaper(rshaper)(dev)
+	WithConfigDir("testdata")(&dev.cfg)
+	WithThreshold(thresh)(&dev.cfg)
+	WithRShaper(rshaper)(&dev.cfg)
 	dev.cfg.hr.db = newDbConfig()
 	dev.cfg.hr.cshaper = 3
 	dev.cfg.hr.data = dev.cfg.hr.buf[4:]
