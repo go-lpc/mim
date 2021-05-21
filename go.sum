@@ -79,6 +79,9 @@ github.com/stretchr/testify v1.3.0/go.mod h1:M5WIy9Dh21IEIfnGCwXGc5bZfKNJtfHm1UV
 github.com/stretchr/testify v1.4.0 h1:2E4SXV/wtOkTonXsotYi4li6zVWxYlZuYNCXe9XRJyk=
 github.com/stretchr/testify v1.4.0/go.mod h1:j7eGeouHqKxXV5pUuKE4zz7dFj8WfuZ+81PSLYec5m4=
 github.com/yuin/goldmark v1.2.1/go.mod h1:3hX8gzYuyVAZsxl0MRgGTJEmQBFcNTphYh9decYSb74=
+github.com/ziutek/ftdi v0.0.1 h1:IrFtqLisIzEfgSnuLg1suZYLkn227DTyE464XswAGK4=
+github.com/ziutek/ftdi v0.0.1/go.mod h1:fUzQhjslJJSlwoMW5Cd+0RUc8KuMDfsuZB+wfJAz1eg=
+github.com/ziutek/lcd v0.0.0-20141212131202-924f223d0903/go.mod h1:ZBCPhfHIcCtzsrXIcyEiSPDKHrjT9fXtJNKj2t1HCKw=
 go-hep.org/x/hep v0.32.1 h1:O96fOyMP+4ET8X+Uu38VFdegQb7rL0rjmFqXMCSm4VM=
 go-hep.org/x/hep v0.32.1/go.mod h1:VX3IVUv0Ku5bgWhE+LxRQ1aT7BmWWxSxQu02hfsoeRI=
 go.nanomsg.org/mangos/v3 v3.2.1/go.mod h1:RxVwsn46YtfJ74mF8MeVo+MFjg545KCI50NuZrFXmzc=

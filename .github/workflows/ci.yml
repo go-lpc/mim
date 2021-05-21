@@ -53,7 +53,7 @@ jobs:
       if: matrix.platform == 'ubuntu-latest'
       run: |
         sudo apt-get update
-        sudo apt-get install -qq pkg-config gcc-arm-linux-gnueabihf
+        sudo apt-get install -qq pkg-config gcc-arm-linux-gnueabihf libftdi1-dev
 
     - name: Build-Linux-32b-arm
       if: matrix.platform == 'ubuntu-latest'
