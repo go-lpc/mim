@@ -3,6 +3,7 @@ module github.com/go-lpc/mim
 go 1.19
 
 require (
+	github.com/go-daq/smbus v0.0.0-20201216173259-5725b4593606
 	github.com/go-daq/tdaq v0.14.2
 	github.com/go-sql-driver/mysql v1.7.0
 	github.com/peterh/liner v1.2.2
