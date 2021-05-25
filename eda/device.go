@@ -309,14 +309,18 @@ func (dev *Device) configureFromCSV() error {
 }
 
 func (dev *Device) Initialize() error {
+	var err error
 	if len(dev.cfg.daq.addrs) != 0 {
 		dev.msg.Printf("initialize rfm sinks: %v", dev.rfms)
 		for i := range dev.rfms {
-			dev.serveRFM(i, dev.cfg.daq.addrs[i])
+			err = dev.serveRFM(i, dev.cfg.daq.addrs[i])
+			if err != nil {
+				return err
+			}
 		}
 	}
 
-	err := dev.initFPGA()
+	err = dev.initFPGA()
 	if err != nil {
 		return fmt.Errorf("eda: could not initialize FPGA: %w", err)
 	}
@@ -748,7 +752,7 @@ func (dev *Device) initRun(run uint32) error {
 	return nil
 }
 
-func (dev *Device) serveRFM(i int, addr string) {
+func (dev *Device) serveRFM(i int, addr string) error {
 	rfm := dev.rfms[i]
 	dev.msg.Printf(
 		"dialing RFM(dif=%d, slot=%d) to %q...",
@@ -757,13 +761,13 @@ func (dev *Device) serveRFM(i int, addr string) {
 
 	conn, err := net.Dial("tcp", addr)
 	if err != nil {
-		dev.msg.Printf("could not connect to %q for rfm=%d: %+v", addr, rfm, err)
-		return
+		return fmt.Errorf("could not connect to %q for rfm=%d: %+v", addr, rfm, err)
 	}
 	dev.daq.rfm[i].id = dev.difs[rfm]
 	dev.daq.rfm[i].slot = rfm
 	dev.daq.rfm[i].sck = conn
 	dev.msg.Printf("dialing RFM(%d) to %q... [ok]", rfm, addr)
+	return nil
 }
 
 func (dev *Device) loop() {
