@@ -18,11 +18,6 @@ import (
 )
 
 func TestRun(t *testing.T) {
-	const (
-		daqAddr = ":9999"
-		edaID   = 1
-	)
-
 	sink := func(done chan int, rfm int) string {
 		srv, err := net.Listen("tcp", ":0")
 		if err != nil {
@@ -131,7 +126,6 @@ func TestRun(t *testing.T) {
 			}
 			defer dev.Close()
 
-			dev.id = edaID
 			dev.rfms = []int{tc.rfm}
 			dev.cfg.daq.addrs = []string{rfmAddr}
 

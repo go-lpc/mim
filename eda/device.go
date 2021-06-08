@@ -27,8 +27,6 @@ import (
 
 const (
 	nRFM        = 4
-	difIDOffset = 0x00
-
 	nHR         = 8
 	nBitsCfgHR  = 872
 	nBytesCfgHR = 109
@@ -59,8 +57,7 @@ var _ device = (*Device)(nil)
 // Device represents an EDA board device.
 type Device struct {
 	msg  *log.Logger
-	id   uint32 // [0,8)
-	rfms []int  // list of enabled RFM slots
+	rfms []int // list of enabled RFM slots
 	mem  struct {
 		fd  *os.File
 		lw  *mmap.Handle

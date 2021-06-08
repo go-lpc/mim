@@ -26,7 +26,6 @@ func newStandalone(odir, devmem, devshm string, run int, opts ...Option) (*stand
 	if err != nil {
 		return nil, fmt.Errorf("could not create EDA device: %w", err)
 	}
-	dev.id = 1
 	srv := &standalone{
 		dev:  dev,
 		run:  uint32(run),

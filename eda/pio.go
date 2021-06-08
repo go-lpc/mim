@@ -1825,10 +1825,6 @@ func (dev *Device) daqFIFOFillLevel(rfm int) uint32 {
 // 	return nRAMUnits
 // }
 
-func difIDFrom(id uint32, rfm int) byte {
-	return difIDOffset + byte(id&7)<<3 + byte(rfm)&3
-}
-
 func (dev *Device) daqWriteDIFData(w io.Writer, slot int) {
 	var (
 		rfm  = &dev.daq.rfm[slot]
