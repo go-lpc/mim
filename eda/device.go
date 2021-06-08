@@ -59,9 +59,8 @@ var _ device = (*Device)(nil)
 // Device represents an EDA board device.
 type Device struct {
 	msg  *log.Logger
-	id   uint32        // [0,8)
-	rfms []int         // list of enabled RFMs
-	difs map[int]uint8 // map of EDA-slot->DIF/RFM-id
+	id   uint32 // [0,8)
+	rfms []int  // list of enabled RFM slots
 	mem  struct {
 		fd  *os.File
 		lw  *mmap.Handle
@@ -146,13 +145,12 @@ func newDevice(devmem, odir, devshm string, opts ...Option) (*Device, error) {
 
 	// setup RFMs indices from provided mask
 	dev.rfms = nil
-	dev.difs = make(map[int]uint8, nRFM)
 	dev.daq.rfm = make([]rfmSink, nRFM)
 	for i := 0; i < nRFM; i++ {
+		dev.daq.rfm[i].slot = i
 		dev.daq.rfm[i].buf = make([]byte, nMsgHdr)
 		if (dev.cfg.daq.rfm>>i)&1 == 1 {
 			dev.rfms = append(dev.rfms, i)
-			dev.difs[i] = difIDFrom(dev.id, i)
 		}
 	}
 
@@ -243,7 +241,6 @@ func NewDevice(fname string, odir string, opts ...Option) (*Device, error) {
 
 func (dev *Device) Boot(args []conddb.RFM) error {
 	dev.rfms = nil
-	dev.difs = make(map[int]uint8, nRFM)
 	dev.cfg.daq.rfm = 0
 	for _, rfm := range args {
 		dev.msg.Printf(
@@ -251,8 +248,7 @@ func (dev *Device) Boot(args []conddb.RFM) error {
 			rfm.ID, rfm.EDA, rfm.Slot,
 		)
 		dev.rfms = append(dev.rfms, rfm.Slot)
-		dev.difs[rfm.Slot] = uint8(rfm.ID)
-		dev.id = uint32(rfm.EDA)
+		dev.daq.rfm[rfm.Slot].id = uint8(rfm.ID)
 		dev.cfg.daq.rfm |= (1 << rfm.Slot)
 		dev.cfg.hr.rshaper = uint32(rfm.DAQ.RShaper)
 	}
@@ -312,8 +308,8 @@ func (dev *Device) Initialize() error {
 	var err error
 	if len(dev.cfg.daq.addrs) != 0 {
 		dev.msg.Printf("initialize rfm sinks: %v", dev.rfms)
-		for i := range dev.rfms {
-			err = dev.serveRFM(i, dev.cfg.daq.addrs[i])
+		for i, slot := range dev.rfms {
+			err = dev.serveRFM(slot, dev.cfg.daq.addrs[i])
 			if err != nil {
 				return err
 			}
@@ -419,9 +415,9 @@ func (dev *Device) initHRFromDB() error {
 	}
 
 	// for each active RFM, tune the configuration and send it.
-	for i := range dev.rfms {
-		rfm := uint32(dev.rfms[i])
-		dif := dev.difs[int(rfm)]
+	for _, slot := range dev.rfms {
+		rfm := uint32(slot)
+		dif := dev.daq.rfm[slot].id
 		asics := dev.cfg.hr.db.asics[dif]
 		// mask unused channels
 		for hr := uint32(0); hr < nHR; hr++ {
@@ -753,20 +749,18 @@ func (dev *Device) initRun(run uint32) error {
 }
 
 func (dev *Device) serveRFM(i int, addr string) error {
-	rfm := dev.rfms[i]
+	rfm := &dev.daq.rfm[i]
 	dev.msg.Printf(
 		"dialing RFM(dif=%d, slot=%d) to %q...",
-		dev.difs[rfm], rfm, addr,
+		rfm.id, rfm.slot, addr,
 	)
 
 	conn, err := net.Dial("tcp", addr)
 	if err != nil {
-		return fmt.Errorf("could not connect to %q for rfm=%d: %+v", addr, rfm, err)
+		return fmt.Errorf("could not connect to %q for rfm=(id=%d, slot=%d): %+v", addr, rfm.id, rfm.slot, err)
 	}
-	dev.daq.rfm[i].id = dev.difs[rfm]
-	dev.daq.rfm[i].slot = rfm
 	dev.daq.rfm[i].sck = conn
-	dev.msg.Printf("dialing RFM(%d) to %q... [ok]", rfm, addr)
+	dev.msg.Printf("dialing RFM(dif=%d, slot=%d) to %q... [ok]", rfm.id, rfm.slot, addr)
 	return nil
 }
 
