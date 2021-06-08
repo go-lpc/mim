@@ -49,8 +49,8 @@ loop:
 				Descr:     "",
 				Params: lcio.Params{
 					Ints: map[string][]int32{
-						"Clock":   []int32{200},
-						"Trigger": []int32{0},
+						"Clock":   {200},
+						"Trigger": {0},
 					},
 				},
 			})

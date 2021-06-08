@@ -26,20 +26,25 @@ func LCIO2EDA(w io.Writer, r *lcio.Reader, freq int, msg *log.Logger) error {
 		if i%freq == 0 {
 			msg.Printf("processing evt %d...", i)
 		}
-		evt := r.Event()
-		raw := evt.Get("RU_XDAQ").(*lcio.GenericObject).Data[0].I32s
-		buf := bytesFromI32s(raw[6:])
-		dec := eformat.NewDecoder(buf[1], bytes.NewReader(buf))
-		dec.IsEDA = true
 
-		var d eformat.DIF
-		err := dec.Decode(&d)
-		if err != nil {
-			return fmt.Errorf("could not decode EDA: %w", err)
-		}
-		err = enc.Encode(&d)
-		if err != nil {
-			return fmt.Errorf("could not re-encode EDA: %w", err)
+		evt := r.Event()
+		daq := evt.Get("RU_XDAQ").(*lcio.GenericObject)
+
+		for _, obj := range daq.Data {
+			raw := obj.I32s
+			buf := bytesFromI32s(raw[6:])
+			dec := eformat.NewDecoder(buf[1], bytes.NewReader(buf))
+			dec.IsEDA = true
+
+			var d eformat.DIF
+			err := dec.Decode(&d)
+			if err != nil {
+				return fmt.Errorf("could not decode EDA: %w", err)
+			}
+			err = enc.Encode(&d)
+			if err != nil {
+				return fmt.Errorf("could not re-encode EDA: %w", err)
+			}
 		}
 		i++
 	}
