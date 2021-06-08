@@ -11,7 +11,6 @@ import (
 	"fmt"
 	"io"
 	"log"
-	"reflect"
 	"unsafe"
 
 	"github.com/go-lpc/mim/internal/eformat"
@@ -105,10 +104,8 @@ func i32sFrom(w *bytes.Buffer, d *eformat.DIF) []int32 {
 
 	// FIXME(sbinet): use a special io.Writer that writes to
 	// a []int32 instead of this unsafe business ?
-	hdr := *(*reflect.SliceHeader)(unsafe.Pointer(&raw))
-	hdr.Len /= 4
-	hdr.Cap /= 4
+	ptr := (*int32)(unsafe.Pointer(&raw[0]))
+	sli := unsafe.Slice(ptr, len(raw)/i32sz)
 
-	data := *(*[]int32)(unsafe.Pointer(&hdr))
-	return data
+	return sli
 }

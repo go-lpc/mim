@@ -9,7 +9,6 @@ import (
 	"fmt"
 	"io"
 	"log"
-	"reflect"
 	"unsafe"
 
 	"github.com/go-lpc/mim/internal/eformat"
@@ -48,10 +47,12 @@ func LCIO2EDA(w io.Writer, r *lcio.Reader, freq int, msg *log.Logger) error {
 }
 
 func bytesFromI32s(raw []int32) []byte {
+	n := len(raw)
+	if n == 0 {
+		return nil
+	}
 	const i32sz = 4
-	hdr := *(*reflect.SliceHeader)(unsafe.Pointer(&raw))
-	hdr.Len *= i32sz
-	hdr.Cap *= i32sz
-
-	return *(*[]byte)(unsafe.Pointer(&hdr))
+	ptr := (*byte)(unsafe.Pointer(&raw[0]))
+	sli := unsafe.Slice(ptr, i32sz*n)
+	return sli
 }
