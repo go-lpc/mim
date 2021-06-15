@@ -22,6 +22,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	mail "gopkg.in/gomail.v2"
@@ -55,7 +56,9 @@ func run(name, addr, dir string, freq time.Duration) {
 type server struct {
 	conn net.Listener
 	stat net.Listener
-	cmd  *exec.Cmd
+
+	mu  sync.Mutex
+	cmd *exec.Cmd
 
 	dir    string
 	freq   time.Duration
@@ -115,22 +118,14 @@ func (srv *server) handle(conn net.Conn, name string) {
 			go srv.waitReady(ready)
 
 			log.Printf("starting command... %s %v", name, req.Args)
-			srv.cmd = exec.Command(name, req.Args...)
-			srv.cmd.Stderr = os.Stderr
-			srv.cmd.Stdout = os.Stdout
-			err = srv.cmd.Start()
+			err = srv.startCmd(name, req.Args...)
 			if err != nil {
-				log.Printf("could not start %s %s: %+v",
-					srv.cmd.Path,
-					strings.Join(srv.cmd.Args, " "),
-					err,
-				)
 				_ = json.NewEncoder(conn).Encode(Reply{Err: err.Error()})
 				return
 			}
 			err = <-ready
 			if err != nil {
-				_ = srv.cmd.Process.Kill()
+				_ = srv.killCmd()
 				log.Printf("command not in proper state: %+v", err)
 				_ = json.NewEncoder(conn).Encode(Reply{Err: err.Error()})
 				return
@@ -143,15 +138,8 @@ func (srv *server) handle(conn net.Conn, name string) {
 
 		case "stop":
 			log.Printf("stopping command...")
-			// make sure the process is eventually reaped by PID-1
-			go func() { _ = srv.cmd.Wait() }()
-			err = srv.cmd.Process.Signal(os.Interrupt)
+			err = srv.stopCmd()
 			if err != nil {
-				log.Printf("could not stop %s %s: %+v",
-					srv.cmd.Path,
-					strings.Join(srv.cmd.Args, " "),
-					err,
-				)
 				_ = json.NewEncoder(conn).Encode(Reply{Err: err.Error()})
 				return
 			}
@@ -164,6 +152,67 @@ func (srv *server) handle(conn net.Conn, name string) {
 			_ = json.NewEncoder(conn).Encode(Reply{Err: "unknown command"})
 		}
 	}
+}
+
+func (srv *server) startCmd(name string, args ...string) error {
+	srv.mu.Lock()
+	defer srv.mu.Unlock()
+
+	cmd := srv.cmd
+	srv.cmd = nil
+
+	if cmd != nil {
+		pid := cmd.Process.Pid
+		log.Printf("killing previously launched command (pid=%d)...", pid)
+		err := cmd.Process.Kill()
+		log.Printf("killing previously launched command (pid=%d)... err=%+v", pid, err)
+	}
+
+	srv.cmd = exec.Command(name, args...)
+	srv.cmd.Stderr = os.Stderr
+	srv.cmd.Stdout = os.Stdout
+
+	err := srv.cmd.Start()
+	if err != nil {
+		log.Printf("could not start %s %s: %+v",
+			srv.cmd.Path,
+			strings.Join(srv.cmd.Args, " "),
+			err,
+		)
+		srv.cmd = nil
+		return err
+	}
+
+	return nil
+}
+
+func (srv *server) killCmd() error {
+	srv.mu.Lock()
+	defer srv.mu.Unlock()
+	err := srv.cmd.Process.Kill()
+	srv.cmd = nil
+	return err
+}
+
+func (srv *server) stopCmd() error {
+	srv.mu.Lock()
+	defer srv.mu.Unlock()
+
+	cmd := srv.cmd
+	srv.cmd = nil
+	// make sure the process is eventually reaped by PID-1
+	go func() { _ = cmd.Wait() }()
+
+	err := cmd.Process.Signal(os.Interrupt)
+	if err != nil {
+		log.Printf("could not stop %s %s: %+v",
+			cmd.Path,
+			strings.Join(cmd.Args, " "),
+			err,
+		)
+		return err
+	}
+	return nil
 }
 
 type Request struct {
