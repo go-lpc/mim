@@ -16,12 +16,17 @@ type rwer interface {
 	io.WriterAt
 }
 
+type rw32 interface {
+	readU32(r io.ReaderAt, offset int64) uint32
+	writeU32(w io.WriterAt, offset int64, v uint32)
+}
+
 type reg32 struct {
 	r func() uint32
 	w func(v uint32)
 }
 
-func newReg32(dev *Device, rw rwer, offset int64) reg32 {
+func newReg32(dev rw32, rw rwer, offset int64) reg32 {
 	return reg32{
 		r: func() uint32 {
 			return dev.readU32(rw, offset)
@@ -35,14 +40,12 @@ func newReg32(dev *Device, rw rwer, offset int64) reg32 {
 type hrCfg struct {
 	rw   rwer
 	addr int64
-	size int64
 }
 
-func newHRCfg(dev *Device, rw rwer, offset int64) hrCfg {
+func newHRCfg(rw rwer, offset int64) hrCfg {
 	return hrCfg{
 		rw:   rw,
 		addr: offset,
-		size: 4 + nHR*nBytesCfgHR,
 	}
 }
 
@@ -56,6 +59,9 @@ func (hr *hrCfg) r(i int) byte {
 }
 
 func (hr *hrCfg) w(p []byte) (int, error) {
+	if len(p) > szCfgHR {
+		return 0, io.ErrShortBuffer
+	}
 	n, err := hr.rw.WriteAt(p, hr.addr)
 	return int(n), err
 }
@@ -64,7 +70,7 @@ type daqFIFO struct {
 	pins [6]reg32
 }
 
-func newDAQFIFO(dev *Device, rw rwer, offset int64) daqFIFO {
+func newDAQFIFO(dev rw32, rw rwer, offset int64) daqFIFO {
 	const sz = 4 // sizeof(uint32)
 	return daqFIFO{
 		pins: [6]reg32{
