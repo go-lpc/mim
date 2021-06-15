@@ -57,7 +57,7 @@ func newServer(addr, odir, devmem, devshm string, opts ...Option) (*server, erro
 		devshm: devshm,
 
 		newDevice: func(devmem, odir, devshm string, opts ...Option) (device, error) {
-			return newDevice(devmem, odir, devshm, opts...)
+			return newCDevice(devmem, odir, devshm, opts...)
 		},
 
 		opts: opts,
