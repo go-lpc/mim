@@ -366,6 +366,9 @@ func (dev *Device) initFPGA() error {
 
 	dev.msg.Printf("trigger mode: %v", dev.cfg.daq.mode)
 	switch dev.cfg.daq.mode {
+	default:
+		return fmt.Errorf("eda: invalid trigger mode: %v", dev.cfg.daq.mode)
+
 	case "dcc":
 		err = dev.syncSelectCmdDCC()
 		if err != nil {
@@ -379,14 +382,40 @@ func (dev *Device) initFPGA() error {
 		if err != nil {
 			return fmt.Errorf("eda: could not enable DCC RAM-full: %w", err)
 		}
+
 	case "noise":
 		err = dev.syncSelectCmdSoft()
 		if err != nil {
 			return fmt.Errorf("eda: could not select SOFT cmd: %w", err)
 		}
 
-	default:
-		return fmt.Errorf("eda: invalid trigger mode: %v", dev.cfg.daq.mode)
+	case "inj":
+		// set injector DAC
+		const injDAC = 100
+		dev.msg.Printf("setting injector DAC with value %d", injDAC)
+		for _, rfm := range dev.rfms {
+			dev.msg.Printf("rfm %d...", rfm)
+			err = dev.injDACSelect(rfm)
+			if err != nil {
+				return fmt.Errorf(
+					"eda: could select injector DAC for rfm=%d: %w",
+					rfm, err,
+				)
+			}
+
+			err = dev.injDACSet(rfm, injDAC)
+			if err != nil {
+				return fmt.Errorf(
+					"eda: could not set injector DAC for rfm=%d: %w",
+					rfm, err,
+				)
+			}
+		}
+
+		err = dev.syncSelectCmdSoft()
+		if err != nil {
+			return fmt.Errorf("eda: could not select SOFT cmd: %w", err)
+		}
 	}
 
 	return nil
@@ -405,6 +434,18 @@ func (dev *Device) initHRFromDB() error {
 
 	dev.hrscSetRShaper(0, dev.cfg.hr.rshaper)
 	dev.hrscSetCShaper(0, dev.cfg.hr.cshaper)
+
+	if dev.cfg.mode == "inj" {
+		dev.hrscSetCtest(0, 31, 1)
+		dev.hrscSetCtest(1, 31, 1)
+		dev.hrscSetCtest(2, 31, 1)
+		dev.hrscSetCtest(3, 31, 1)
+		dev.hrscSetCtest(4, 31, 1)
+		dev.hrscSetCtest(5, 31, 1)
+		dev.hrscSetCtest(6, 31, 1)
+		dev.hrscSetCtest(7, 31, 1)
+		dev.hrscSetCtest(8, 31, 1)
+	}
 
 	// set chip IDs
 	for hr := uint32(0); hr < nHR; hr++ {
@@ -592,6 +633,8 @@ func (dev *Device) Start(run uint32) error {
 		return dev.startRunDCC(run)
 	case "noise":
 		return dev.startRunNoise(run)
+	case "inj":
+		return dev.startRunInj(run)
 	default:
 		err := fmt.Errorf("eda: unknown trig-mode %q", dev.cfg.daq.mode)
 		dev.msg.Printf("%+v", err)
@@ -660,6 +703,47 @@ func (dev *Device) startRunDCC(run uint32) error {
 
 func (dev *Device) startRunNoise(run uint32) error {
 	var err error
+	for _, rfm := range dev.rfms {
+		err = dev.daqFIFOInit(rfm)
+		if err != nil {
+			return fmt.Errorf("eda: could not initialize DAQ FIFO (RFM=%d): %w", rfm, err)
+		}
+	}
+
+	err = dev.cntReset()
+	if err != nil {
+		return fmt.Errorf("eda: could not reset counters: %w", err)
+	}
+
+	err = dev.syncResetBCID()
+	if err != nil {
+		return fmt.Errorf("eda: could not reset BCID: %w", err)
+	}
+
+	err = dev.syncStart()
+	if err != nil {
+		return fmt.Errorf("eda: could not start acquisition: %w", err)
+	}
+
+	err = dev.syncArmFIFO()
+	if err != nil {
+		return fmt.Errorf("eda: could not arm FIFO: %w", err)
+	}
+
+	dev.daq.done = make(chan int)
+
+	go dev.loop()
+	return nil
+}
+
+func (dev *Device) startRunInj(run uint32) error {
+	var err error
+
+	err = dev.injStartCTestPulser(25000, 0) // 100Hz
+	if err != nil {
+		return fmt.Errorf("eda: could not start ctest pulser: %w", err)
+	}
+
 	for _, rfm := range dev.rfms {
 		err = dev.daqFIFOInit(rfm)
 		if err != nil {
@@ -767,6 +851,8 @@ func (dev *Device) loop() {
 		dev.loopDCC()
 	case "noise":
 		dev.loopNoise()
+	case "inj":
+		dev.loopInj()
 	default:
 		err := fmt.Errorf("eda: invalid trig-mode %q", dev.cfg.daq.mode)
 		panic(err)
@@ -996,6 +1082,126 @@ func (dev *Device) loopNoise() {
 	}
 }
 
+func (dev *Device) loopInj() {
+	var (
+		w      = dev.msg.Writer()
+		printf = fmt.Fprintf
+		errorf = func(format string, args ...interface{}) {
+			dev.err = fmt.Errorf(format, args...)
+			dev.msg.Printf("%+v", dev.err)
+		}
+		cycle int
+		err   error
+	)
+
+	if len(dev.daq.rfm) != 0 {
+		for i := range dev.daq.rfm {
+			rfm := &dev.daq.rfm[i]
+			if !rfm.valid() {
+				continue
+			}
+			defer rfm.sck.Close()
+		}
+	}
+
+	for i := range dev.daq.rfm {
+		rfm := &dev.daq.rfm[i]
+		rfm.w = &wbuf{
+			p: make([]byte, daqBufferSize),
+		}
+	}
+
+	for {
+		printf(w, "trigger %07d, state: acq-", cycle)
+		// wait until readout is done
+	readout:
+		for {
+			state := dev.syncState()
+			switch {
+			case state >= regs.S_RAMFULL:
+				break readout
+			default:
+				select {
+				case <-dev.daq.done:
+					dev.daq.done <- 1
+					return
+				default:
+				}
+			}
+		}
+		printf(w, "ramfull-")
+		err = dev.syncRAMFullExt()
+		if err != nil {
+			errorf("could not set RAMFULL: %+v", err)
+			return
+		}
+
+	dataReady:
+		for {
+			state := dev.syncState()
+			switch {
+			case state >= regs.S_FIFO_READY:
+				break dataReady
+			default:
+				select {
+				case <-dev.daq.done:
+					dev.daq.done <- 1
+					return
+				default:
+				}
+			}
+		}
+
+		printf(w, "cp-") // copy
+
+		// read hardroc data
+		for i, rfm := range dev.rfms {
+			dev.daqWriteDIFData(dev.daq.rfm[i].w, rfm)
+		}
+		err = dev.syncAckFIFO()
+		if err != nil {
+			errorf("eda: could not ACK FIFO: %w", err)
+			return
+		}
+		printf(w, "tx-")
+		var grp errgroup.Group
+		for i := range dev.daq.rfm {
+			if !dev.daq.rfm[i].valid() {
+				continue
+			}
+			ii := i
+			grp.Go(func() error {
+				err := dev.daqSendDIFData(ii)
+				if err != nil {
+					errorf("eda: could not send DIF data (RFM=%d): %w", dev.rfms[ii], err)
+					return err
+				}
+				return nil
+			})
+		}
+		err = grp.Wait()
+		if err != nil {
+			errorf("eda: could not send DIF data: %w", err)
+			return
+		}
+
+		printf(w, "\n")
+		cycle++
+
+		select {
+		case <-dev.daq.done:
+			dev.daq.done <- 1
+			return
+		default:
+			err = dev.syncStart()
+			if err != nil {
+				errorf("eda: could not start acquisition: %w", err)
+				return
+			}
+		}
+	}
+}
+
 func (dev *Device) Stop() error {
 	const timeout = 10 * time.Second
 	tck := time.NewTimer(timeout)
@@ -1027,6 +1233,19 @@ func (dev *Device) Stop() error {
 		err = dev.cntStop()
 		if err != nil {
 			return fmt.Errorf("eda: could not stop counters: %w", err)
+		}
+	case "inj":
+		err = dev.syncStop()
+		if err != nil {
+			return fmt.Errorf("eda: could not stop acquisition: %w", err)
+		}
+		err = dev.cntStop()
+		if err != nil {
+			return fmt.Errorf("eda: could not stop counters: %w", err)
+		}
+		err = dev.injStopCTestPulser()
+		if err != nil {
+			return fmt.Errorf("eda: could not stop ctest pulser: %w", err)
 		}
 	}
 

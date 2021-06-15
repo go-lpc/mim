@@ -15,6 +15,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/go-daq/smbus"
 	"github.com/go-lpc/mim/eda/internal/regs"
 	"github.com/go-lpc/mim/internal/eformat"
 	"github.com/go-lpc/mim/internal/mmap"
@@ -1164,11 +1165,11 @@ func (dev *Device) hrscWriteConfHRs(fname string) error {
 	return nil
 }
 
-// // hrscSetCtest switches the test capacitor (1=closed).
-// func (dev *Device) hrscSetCtest(hr, ch, v uint32) {
-// 	dev.hrscSetBit(hr, ch, v&0x01)
-// }
-//
+// hrscSetCtest switches the test capacitor (1=closed).
+func (dev *Device) hrscSetCtest(hr, ch, v uint32) {
+	dev.hrscSetBit(hr, ch, v&0x01)
+}
+
 // func (dev *Device) hrscSetAllCtestOff() {
 // 	for hr := uint32(0); hr < nHR; hr++ {
 // 		for ch := uint32(0); ch < nChans; ch++ {
@@ -2004,5 +2005,74 @@ func (dev *Device) daqSendDIFData(i int) error {
 		)
 	}
 
+	return nil
+}
+
+// --- test injector ---
+
+func (dev *Device) i2c(rfm int) (*smbus.Conn, error) {
+	addr := 0b00100000 + (uint8(rfm) & 0x3)
+	conn, err := smbus.Open(0, addr)
+	if err != nil {
+		return nil, fmt.Errorf("eda: could not connect to I2C bus(0,rfm=%d): %w", rfm, err)
+	}
+
+	return conn, nil
+}
+
+func (dev *Device) injDACSelect(rfm int) error {
+	conn, err := dev.i2c(rfm)
+	if err != nil {
+		return err
+	}
+	defer conn.Close()
+
+	return nil
+}
+
+func (dev *Device) injDACSet(rfm int, v uint32) error {
+	conn, err := dev.i2c(rfm)
+	if err != nil {
+		return err
+	}
+	defer conn.Close()
+
+	_, err = conn.Write([]byte{
+		0,                // command byte
+		uint8(v % 0x100), // lsb
+		uint8(v >> 8),    // msb
+	})
+	if err != nil {
+		return fmt.Errorf("eda: could not write 3 bytes to LTC1668 DAC: %w", err)
+	}
+
+	time.Sleep(200 * time.Microsecond) // for stabilization.
+	return nil
+}
+
+func (dev *Device) injStartCTestPulser(halfPeriod, phase uint32) error {
+	// half period unit = 200 ns
+	// phase unit = 6.25 ns
+	v := (phase&0x1f)<<16 | (halfPeriod & 0xffff)
+	dev.regs.pio.pulser.w(v) // set timing registers
+	time.Sleep(1 * time.Microsecond)
+	dev.regs.pio.ctrl.w(dev.regs.pio.ctrl.r() | regs.O_CTEST) // enable
+
+	if dev.err != nil {
+		return fmt.Errorf("eda: could not start ctest pulser: %w", dev.err)
+	}
+	return nil
+}
+
+func (dev *Device) injStopCTestPulser() error {
+	ctrl := dev.regs.pio.ctrl.r()
+	ctrl &= ^uint32(regs.O_CTEST)
+	dev.regs.pio.ctrl.w(ctrl)
+
+	dev.regs.pio.pulser.w(0)
+
+	if dev.err != nil {
+		return fmt.Errorf("eda: could not stop ctest pulser: %w", dev.err)
+	}
 	return nil
 }
