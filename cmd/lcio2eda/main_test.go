@@ -6,7 +6,6 @@ package main
 
 import (
 	"bytes"
-	"io/ioutil"
 	"os"
 	"path/filepath"
 	"testing"
@@ -17,7 +16,7 @@ import (
 )
 
 func TestLCIO2EDA(t *testing.T) {
-	tmp, err := ioutil.TempDir("", "mim-")
+	tmp, err := os.MkdirTemp("", "mim-")
 	if err != nil {
 		t.Fatalf("could not create tmp dir: %+v", err)
 	}
@@ -67,7 +66,7 @@ func TestLCIO2EDA(t *testing.T) {
 		t.Fatalf("could not close EDA file: %+v", err)
 	}
 
-	edabuf, err := ioutil.ReadFile(fname)
+	edabuf, err := os.ReadFile(fname)
 	if err != nil {
 		t.Fatalf("could not read EDA file: %+v", err)
 	}

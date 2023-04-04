@@ -6,7 +6,6 @@ package xcnv
 
 import (
 	"bytes"
-	"io/ioutil"
 	"log"
 	"os"
 	"path/filepath"
@@ -18,7 +17,7 @@ import (
 )
 
 func TestEDA2LCIO(t *testing.T) {
-	tmp, err := ioutil.TempDir("", "mim-xcnv-")
+	tmp, err := os.MkdirTemp("", "mim-xcnv-")
 	if err != nil {
 		t.Fatalf("could not create tmp dir: %+v", err)
 	}
@@ -79,7 +78,7 @@ func TestEDA2LCIO(t *testing.T) {
 				t.Fatalf("could not close EDA file: %+v", err)
 			}
 
-			edabuf, err := ioutil.ReadFile(fname)
+			edabuf, err := os.ReadFile(fname)
 			if err != nil {
 				t.Fatalf("could not read EDA file: %+v", err)
 			}
@@ -121,7 +120,7 @@ func TestEDA2LCIO(t *testing.T) {
 				t.Fatalf("could not close EDA file: %+v", err)
 			}
 
-			edagot, err := ioutil.ReadFile(fname)
+			edagot, err := os.ReadFile(fname)
 			if err != nil {
 				t.Fatalf("could not read EDA file: %+v", err)
 			}

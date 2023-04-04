@@ -5,7 +5,6 @@
 package main
 
 import (
-	"io/ioutil"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -15,7 +14,7 @@ import (
 )
 
 func TestSplit(t *testing.T) {
-	tmpdir, err := ioutil.TempDir("", "dif-split-")
+	tmpdir, err := os.MkdirTemp("", "dif-split-")
 	if err != nil {
 		t.Fatal(err)
 	}

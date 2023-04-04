@@ -6,7 +6,6 @@ package eda
 
 import (
 	"fmt"
-	"io/ioutil"
 	"os"
 	"path/filepath"
 	"sync"
@@ -22,7 +21,7 @@ type fakeDev struct {
 }
 
 func newFakeDev() (*fakeDev, error) {
-	tmpdir, err := ioutil.TempDir("", "eda-daq-")
+	tmpdir, err := os.MkdirTemp("", "eda-daq-")
 	if err != nil {
 		return nil, fmt.Errorf("could not create tmp-dir: %w", err)
 	}

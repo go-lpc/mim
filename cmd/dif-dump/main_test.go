@@ -7,7 +7,6 @@ package main
 import (
 	"fmt"
 	"io"
-	"io/ioutil"
 	"os"
 	"path/filepath"
 	"strings"
@@ -17,7 +16,7 @@ import (
 )
 
 func TestDump(t *testing.T) {
-	tmpdir, err := ioutil.TempDir("", "dif-dump-")
+	tmpdir, err := os.MkdirTemp("", "dif-dump-")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -60,11 +59,11 @@ func TestDump(t *testing.T) {
 
 	_ = f.Close()
 
-	xmain(ioutil.Discard, []string{"-eda", f.Name()})
+	xmain(io.Discard, []string{"-eda", f.Name()})
 }
 
 func TestProcess(t *testing.T) {
-	tmp, err := ioutil.TempDir("", "mim-dif-dump-")
+	tmp, err := os.MkdirTemp("", "mim-dif-dump-")
 	if err != nil {
 		t.Fatalf("could not create tmp dir: %+v", err)
 	}

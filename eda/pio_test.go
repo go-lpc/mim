@@ -8,7 +8,6 @@ import (
 	"bytes"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"log"
 	"net"
 	"os"
@@ -49,7 +48,7 @@ func TestReadConf(t *testing.T) {
 		}
 	})
 
-	tmp, err := ioutil.TempDir("", "mim-")
+	tmp, err := os.MkdirTemp("", "mim-")
 	if err != nil {
 		t.Fatalf("could not create tmp dir: %+v", err)
 	}
@@ -105,7 +104,7 @@ func TestReadConf(t *testing.T) {
 			dev.cfg.hr.db = newDbConfig()
 			dev.cfg.hr.data = dev.cfg.hr.buf[4:]
 
-			err := ioutil.WriteFile(fname, []byte(tc.data), 0644)
+			err := os.WriteFile(fname, []byte(tc.data), 0644)
 			if err != nil {
 				t.Fatalf("could not create tmp file: %+v", err)
 			}
@@ -159,7 +158,7 @@ func TestReadConfHR(t *testing.T) {
 		}
 	})
 
-	tmp, err := ioutil.TempDir("", "mim-")
+	tmp, err := os.MkdirTemp("", "mim-")
 	if err != nil {
 		t.Fatalf("could not create tmp dir: %+v", err)
 	}
@@ -228,7 +227,7 @@ func TestReadConfHR(t *testing.T) {
 			dev.cfg.hr.db = newDbConfig()
 			dev.cfg.hr.data = dev.cfg.hr.buf[4:]
 
-			err := ioutil.WriteFile(fname, []byte(tc.data), 0644)
+			err := os.WriteFile(fname, []byte(tc.data), 0644)
 			if err != nil {
 				t.Fatalf("could not create tmp file: %+v", err)
 			}
@@ -256,7 +255,7 @@ func TestReadWriteConfHR(t *testing.T) {
 		t.Fatalf("could not read hr-sc cfg: %+v", err)
 	}
 
-	tmp, err := ioutil.TempFile("", "mim-")
+	tmp, err := os.CreateTemp("", "mim-")
 	if err != nil {
 		t.Fatalf("could not create tmp file: %+v", err)
 	}
@@ -267,12 +266,12 @@ func TestReadWriteConfHR(t *testing.T) {
 		t.Fatalf("could not write hr-sc cfg: %+v", err)
 	}
 
-	got, err := ioutil.ReadFile(tmp.Name())
+	got, err := os.ReadFile(tmp.Name())
 	if err != nil {
 		t.Fatalf("could not read back hr-sc cfg: %+v", err)
 	}
 
-	want, err := ioutil.ReadFile("testdata/hr_sc_385.csv")
+	want, err := os.ReadFile("testdata/hr_sc_385.csv")
 	if err != nil {
 		t.Fatalf("could not read back hr-sc ref: %+v", err)
 	}
@@ -336,7 +335,7 @@ func TestReadDacFloor(t *testing.T) {
 		}
 	})
 
-	tmp, err := ioutil.TempDir("", "mim-")
+	tmp, err := os.MkdirTemp("", "mim-")
 	if err != nil {
 		t.Fatalf("could not create tmp dir: %+v", err)
 	}
@@ -418,7 +417,7 @@ func TestReadDacFloor(t *testing.T) {
 			)
 			dev.cfg.hr.db = newDbConfig()
 
-			err := ioutil.WriteFile(fname, []byte(tc.data), 0644)
+			err := os.WriteFile(fname, []byte(tc.data), 0644)
 			if err != nil {
 				t.Fatalf("could not create tmp file: %+v", err)
 			}
@@ -455,7 +454,7 @@ func TestReadPreAmpGain(t *testing.T) {
 		}
 	})
 
-	tmp, err := ioutil.TempDir("", "mim-")
+	tmp, err := os.MkdirTemp("", "mim-")
 	if err != nil {
 		t.Fatalf("could not create tmp dir: %+v", err)
 	}
@@ -544,7 +543,7 @@ func TestReadPreAmpGain(t *testing.T) {
 			)
 			dev.cfg.hr.db = newDbConfig()
 
-			err := ioutil.WriteFile(fname, []byte(tc.data), 0644)
+			err := os.WriteFile(fname, []byte(tc.data), 0644)
 			if err != nil {
 				t.Fatalf("could not create tmp file: %+v", err)
 			}
@@ -670,7 +669,7 @@ func TestReadMask(t *testing.T) {
 		}
 	})
 
-	tmp, err := ioutil.TempDir("", "mim-")
+	tmp, err := os.MkdirTemp("", "mim-")
 	if err != nil {
 		t.Fatalf("could not create tmp dir: %+v", err)
 	}
@@ -759,7 +758,7 @@ func TestReadMask(t *testing.T) {
 			)
 			dev.cfg.hr.db = newDbConfig()
 
-			err := ioutil.WriteFile(fname, []byte(tc.data), 0644)
+			err := os.WriteFile(fname, []byte(tc.data), 0644)
 			if err != nil {
 				t.Fatalf("could not create tmp file: %+v", err)
 			}
@@ -851,7 +850,7 @@ func TestDAQSendDIFData(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			dev := &Device{
-				msg: log.New(ioutil.Discard, "eda: ", 0),
+				msg: log.New(io.Discard, "eda: ", 0),
 				buf: make([]byte, 4),
 			}
 			sck := tc.conn()

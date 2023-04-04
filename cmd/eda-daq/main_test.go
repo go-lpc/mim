@@ -6,7 +6,6 @@ package main
 
 import (
 	"fmt"
-	"io/ioutil"
 	"net"
 	"os"
 	"testing"
@@ -76,13 +75,13 @@ func TestRun(t *testing.T) {
 		defer conn.Close()
 	}()
 
-	devshm, err := ioutil.TempDir("", "eda-daq-")
+	devshm, err := os.MkdirTemp("", "eda-daq-")
 	if err != nil {
 		t.Fatalf("could not create fake dev-shm: %+v", err)
 	}
 	defer os.RemoveAll(devshm)
 
-	devmem, err := ioutil.TempFile("", "eda-daq-")
+	devmem, err := os.CreateTemp("", "eda-daq-")
 	if err != nil {
 		t.Fatalf("could not create fake dev-mem: %+v", err)
 	}

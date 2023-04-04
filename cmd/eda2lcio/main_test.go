@@ -6,7 +6,6 @@ package main
 
 import (
 	"compress/flate"
-	"io/ioutil"
 	"os"
 	"path/filepath"
 	"testing"
@@ -45,7 +44,7 @@ func TestRunNbrFrom(t *testing.T) {
 }
 
 func TestEDA2LCIO(t *testing.T) {
-	tmp, err := ioutil.TempDir("", "mim-xcnv-")
+	tmp, err := os.MkdirTemp("", "mim-xcnv-")
 	if err != nil {
 		t.Fatalf("could not create tmp dir: %+v", err)
 	}

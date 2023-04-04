@@ -5,7 +5,6 @@
 package main
 
 import (
-	"io/ioutil"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -15,7 +14,7 @@ import (
 )
 
 func TestRun(t *testing.T) {
-	dir, err := ioutil.TempDir("", "daq-boot-")
+	dir, err := os.MkdirTemp("", "daq-boot-")
 	if err != nil {
 		t.Fatalf("could not create tmpdir: %+v", err)
 	}
@@ -77,7 +76,7 @@ func TestRun(t *testing.T) {
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			dir, err := ioutil.TempDir("", "daq-boot-")
+			dir, err := os.MkdirTemp("", "daq-boot-")
 			if err != nil {
 				t.Fatalf("could not create tmpdir: %+v", err)
 			}
