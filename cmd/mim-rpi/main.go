@@ -107,7 +107,7 @@ func (dev *rpi) run(ctx tdaq.Context) error {
 			return nil
 		default:
 			raw := make([]byte, 1024)
-			rand.Read(raw)
+			_, _ = dev.rnd.Read(raw)
 			select {
 			case dev.data <- raw:
 				dev.n++
