@@ -13,7 +13,6 @@ import (
 	"testing"
 
 	"github.com/go-lpc/mim/internal/fakedb"
-	_ "github.com/go-lpc/mim/internal/fakedb"
 )
 
 func init() {
