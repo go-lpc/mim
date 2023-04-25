@@ -19,6 +19,8 @@ github.com/davecgh/go-spew v1.1.1/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSs
 github.com/fogleman/gg v1.2.1-0.20190220221249-0403632d5b90/go.mod h1:R/bRT+9gY/C5z7JzPU0zXsXHKM4/ayA+zqcVNZzPa1k=
 github.com/fogleman/gg v1.3.0/go.mod h1:R/bRT+9gY/C5z7JzPU0zXsXHKM4/ayA+zqcVNZzPa1k=
 github.com/gdamore/optopia v0.2.0/go.mod h1:YKYEwo5C1Pa617H7NlPcmQXl+vG6YnSSNB44n8dNL0Q=
+github.com/go-daq/smbus v0.0.0-20201216173259-5725b4593606 h1:1lyGjYJXpYkF6fGQbhAIOdIaeymKQuS6RJVLVlTzc5w=
+github.com/go-daq/smbus v0.0.0-20201216173259-5725b4593606/go.mod h1:KDYiP7UvrtHRqnVLE6ziKupbojinMHjFUdo+1VA7r/Q=
 github.com/go-daq/tdaq v0.14.2 h1:17hEikzmQfLl57mSTxwMaILszGjm+jHSj49/RYPPbEs=
 github.com/go-daq/tdaq v0.14.2/go.mod h1:oiqGEED+dzinsAHVJ1Lq/HZf7RYbaTB8KpHTRDUhxNc=
 github.com/go-fonts/dejavu v0.1.0/go.mod h1:4Wt4I4OU2Nq9asgDCteaAaWZOV24E+0/Pwo0gppep4g=
