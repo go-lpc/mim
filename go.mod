@@ -7,6 +7,7 @@ require (
 	github.com/go-sql-driver/mysql v1.7.0
 	github.com/peterh/liner v1.2.2
 	github.com/sbinet/pmon v0.5.0
+	github.com/ziutek/ftdi v0.0.1
 	go-hep.org/x/hep v0.32.1
 	golang.org/x/sync v0.1.0
 	golang.org/x/sys v0.7.0
