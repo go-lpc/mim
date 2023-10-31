@@ -70,14 +70,14 @@ func (srv *standalone) runDAQ() error {
 	// --- init FPGA ---
 
 	// reset FPGA and set clock.
-	err = dev.syncResetFPGA()
+	err = dev.brd.syncResetFPGA()
 	if err != nil {
 		return fmt.Errorf("eda: could not reset FPGA: %w", err)
 	}
 	time.Sleep(2 * time.Microsecond)
 	cnt := 0
 	max := 100
-	for !dev.syncPLLLock() && cnt < max {
+	for !dev.brd.syncPLLLock() && cnt < max {
 		time.Sleep(10 * time.Millisecond)
 		cnt++
 	}
@@ -85,28 +85,28 @@ func (srv *standalone) runDAQ() error {
 		return fmt.Errorf("eda: could not lock PLL")
 	}
 
-	dev.msg.Printf("pll lock=%v\n", dev.syncPLLLock())
+	dev.msg.Printf("pll lock=%v\n", dev.brd.syncPLLLock())
 
 	// activate RFMs
 	for _, rfm := range dev.rfms {
-		err = dev.rfmOn(rfm)
+		err = dev.brd.rfmOn(rfm)
 		if err != nil {
 			return fmt.Errorf("eda: could not activate RFM=%d: %w", rfm, err)
 		}
-		err = dev.rfmEnable(rfm)
+		err = dev.brd.rfmEnable(rfm)
 		if err != nil {
 			return fmt.Errorf("eda: could not enable RFM=%d: %w", rfm, err)
 		}
 	}
 	time.Sleep(1 * time.Millisecond)
 
-	ctrl := dev.regs.pio.ctrl.r()
+	ctrl := dev.brd.regs.pio.ctrl.r()
 	if dev.err != nil {
 		return fmt.Errorf("eda: could not read control pio: %w", dev.err)
 	}
 	dev.msg.Printf("control pio=0x%x\n", ctrl)
 
-	err = dev.syncSelectCmdSoft()
+	err = dev.brd.syncSelectCmdSoft()
 	if err != nil {
 		return fmt.Errorf("eda: could select cmd-soft mode: %w", err)
 	}
@@ -129,29 +129,29 @@ func (srv *standalone) runDAQ() error {
 	cycleID := 0
 
 	for _, rfm := range dev.rfms {
-		err = dev.daqFIFOInit(rfm)
+		err = dev.brd.daqFIFOInit(rfm)
 		if err != nil {
 			return fmt.Errorf("eda: could not initialize DAQ FIFO (RFM=%d): %w", rfm, err)
 		}
 	}
 
-	err = dev.cntReset()
+	err = dev.brd.cntReset()
 	if err != nil {
 		return fmt.Errorf("eda: could not reset counters: %w", err)
 	}
 
-	err = dev.syncResetBCID()
+	err = dev.brd.syncResetBCID()
 	if err != nil {
 		return fmt.Errorf("eda: could not reset BCID: %w", err)
 	}
 
-	err = dev.syncStart()
+	err = dev.brd.syncStart()
 	if err != nil {
 		return fmt.Errorf("eda: could not start acquisition: %w", err)
 	}
-	dev.msg.Printf("sync-state: %[1]d 0x%[1]x\n", dev.syncState())
+	dev.msg.Printf("sync-state: %[1]d 0x%[1]x\n", dev.brd.syncState())
 
-	err = dev.syncArmFIFO()
+	err = dev.brd.syncArmFIFO()
 	if err != nil {
 		return fmt.Errorf("eda: could not arm FIFO: %w", err)
 	}
@@ -168,7 +168,7 @@ readout:
 
 		//	ramloop:
 		//		for {
-		//			switch state := dev.syncState(); {
+		//			switch state := dev.brd.syncState(); {
 		//			case state == regs.S_RAMFULL:
 		//				// ok.
 		//				dev.msg.Printf("ramfull")
@@ -179,7 +179,7 @@ readout:
 		//			}
 		//		}
 
-		err = dev.syncRAMFullExt()
+		err = dev.brd.syncRAMFullExt()
 		if err != nil {
 			return fmt.Errorf("eda: could not sync for RAMFULL-EXT: %w", err)
 		}
@@ -187,7 +187,7 @@ readout:
 		// wait until data is ready.
 	fifo:
 		for {
-			switch state := dev.syncState(); state {
+			switch state := dev.brd.syncState(); state {
 			case regs.S_FIFO_READY:
 				break fifo
 			default:
@@ -204,12 +204,12 @@ readout:
 		for _, rfm := range dev.rfms {
 			dev.daqWriteDIFData(out, rfm)
 		}
-		err = dev.syncAckFIFO()
+		err = dev.brd.syncAckFIFO()
 		if err != nil {
 			return fmt.Errorf("eda: could not ACK FIFO: %w", err)
 		}
 
-		err = dev.syncStart()
+		err = dev.brd.syncStart()
 		if err != nil {
 			return fmt.Errorf("eda: could not start ACQ (cycle=%d): %w", cycleID, err)
 		}
@@ -217,7 +217,7 @@ readout:
 		cycleID++
 	}
 
-	err = dev.syncStop()
+	err = dev.brd.syncStop()
 	if err != nil {
 		return fmt.Errorf("eda: could not stop ACQ: %w", err)
 	}

@@ -176,77 +176,77 @@ func TestDumpRegisters(t *testing.T) {
 	defer dev.Close()
 
 	var mu sync.RWMutex
-	wrap(dev, &mu, &dev.regs.pio.state, "pio.state", []uint32{
+	wrap(dev, &mu, &dev.brd.regs.pio.state, "pio.state", []uint32{
 		0x1,
 		0x8 << regs.SHIFT_CMD_CODE_MEM,
 	}, nil)
 
-	wrap(dev, &mu, &dev.regs.pio.ctrl, "pio.ctrl", []uint32{
+	wrap(dev, &mu, &dev.brd.regs.pio.ctrl, "pio.ctrl", []uint32{
 		0x2,
 		0x2,
 	}, nil)
 
-	wrap(dev, &mu, &dev.regs.pio.pulser, "pio.pulser", []uint32{
+	wrap(dev, &mu, &dev.brd.regs.pio.pulser, "pio.pulser", []uint32{
 		0x3,
 	}, nil)
 
-	wrap(dev, &mu, &dev.regs.pio.cntHit0[0], "pio.cntHit0[0]", []uint32{
+	wrap(dev, &mu, &dev.brd.regs.pio.cntHit0[0], "pio.cntHit0[0]", []uint32{
 		0x4,
 	}, nil)
 
-	wrap(dev, &mu, &dev.regs.pio.cntHit0[1], "pio.cntHit0[1]", []uint32{
+	wrap(dev, &mu, &dev.brd.regs.pio.cntHit0[1], "pio.cntHit0[1]", []uint32{
 		0x5,
 	}, nil)
 
-	wrap(dev, &mu, &dev.regs.pio.cntHit0[2], "pio.cntHit0[2]", []uint32{
+	wrap(dev, &mu, &dev.brd.regs.pio.cntHit0[2], "pio.cntHit0[2]", []uint32{
 		0x6,
 	}, nil)
 
-	wrap(dev, &mu, &dev.regs.pio.cntHit0[3], "pio.cntHit0[3]", []uint32{
+	wrap(dev, &mu, &dev.brd.regs.pio.cntHit0[3], "pio.cntHit0[3]", []uint32{
 		0x7,
 	}, nil)
 
-	wrap(dev, &mu, &dev.regs.pio.cntHit1[0], "pio.cntHit0[0]", []uint32{
+	wrap(dev, &mu, &dev.brd.regs.pio.cntHit1[0], "pio.cntHit0[0]", []uint32{
 		0x8,
 	}, nil)
 
-	wrap(dev, &mu, &dev.regs.pio.cntHit1[1], "pio.cntHit1[1]", []uint32{
+	wrap(dev, &mu, &dev.brd.regs.pio.cntHit1[1], "pio.cntHit1[1]", []uint32{
 		0x9,
 	}, nil)
 
-	wrap(dev, &mu, &dev.regs.pio.cntHit1[2], "pio.cntHit1[2]", []uint32{
+	wrap(dev, &mu, &dev.brd.regs.pio.cntHit1[2], "pio.cntHit1[2]", []uint32{
 		0x10,
 	}, nil)
 
-	wrap(dev, &mu, &dev.regs.pio.cntHit1[3], "pio.cntHit1[3]", []uint32{
+	wrap(dev, &mu, &dev.brd.regs.pio.cntHit1[3], "pio.cntHit1[3]", []uint32{
 		0x11,
 	}, nil)
 
-	wrap(dev, &mu, &dev.regs.pio.cntTrig, "pio.cntTrig", []uint32{
+	wrap(dev, &mu, &dev.brd.regs.pio.cntTrig, "pio.cntTrig", []uint32{
 		0x12,
 	}, nil)
 
-	wrap(dev, &mu, &dev.regs.pio.cnt48MSB, "pio.cnt48MSB", []uint32{
+	wrap(dev, &mu, &dev.brd.regs.pio.cnt48MSB, "pio.cnt48MSB", []uint32{
 		0x13,
 	}, nil)
 
-	wrap(dev, &mu, &dev.regs.pio.cnt48LSB, "pio.cnt48LSB", []uint32{
+	wrap(dev, &mu, &dev.brd.regs.pio.cnt48LSB, "pio.cnt48LSB", []uint32{
 		0x14,
 	}, nil)
 
-	wrap(dev, &mu, &dev.regs.fifo.daqCSR[0].pins[0], "fifo.daqCSR[0]", []uint32{
+	wrap(dev, &mu, &dev.brd.regs.fifo.daqCSR[0].pins[0], "fifo.daqCSR[0]", []uint32{
 		0x15,
 	}, nil)
 
-	wrap(dev, &mu, &dev.regs.fifo.daqCSR[1].pins[0], "fifo.daqCSR[1]", []uint32{
+	wrap(dev, &mu, &dev.brd.regs.fifo.daqCSR[1].pins[0], "fifo.daqCSR[1]", []uint32{
 		0x16,
 	}, nil)
 
-	wrap(dev, &mu, &dev.regs.fifo.daqCSR[2].pins[0], "fifo.daqCSR[2]", []uint32{
+	wrap(dev, &mu, &dev.brd.regs.fifo.daqCSR[2].pins[0], "fifo.daqCSR[2]", []uint32{
 		0x17,
 	}, nil)
 
-	wrap(dev, &mu, &dev.regs.fifo.daqCSR[3].pins[0], "fifo.daqCSR[3]", []uint32{
+	wrap(dev, &mu, &dev.brd.regs.fifo.daqCSR[3].pins[0], "fifo.daqCSR[3]", []uint32{
 		0x18,
 	}, nil)
 
@@ -307,27 +307,27 @@ func TestDumpFIFOStatus(t *testing.T) {
 
 			var mu sync.RWMutex
 
-			wrap(dev, &mu, &dev.regs.fifo.daqCSR[rfmID].pins[regs.ALTERA_AVALON_FIFO_LEVEL_REG], "fifo-level", []uint32{
+			wrap(dev, &mu, &dev.brd.regs.fifo.daqCSR[rfmID].pins[regs.ALTERA_AVALON_FIFO_LEVEL_REG], "fifo-level", []uint32{
 				0x1,
 			}, nil)
 
-			wrap(dev, &mu, &dev.regs.fifo.daqCSR[rfmID].pins[regs.ALTERA_AVALON_FIFO_STATUS_REG], "fifo-status", []uint32{
+			wrap(dev, &mu, &dev.brd.regs.fifo.daqCSR[rfmID].pins[regs.ALTERA_AVALON_FIFO_STATUS_REG], "fifo-status", []uint32{
 				0xffffff,
 			}, nil)
 
-			wrap(dev, &mu, &dev.regs.fifo.daqCSR[rfmID].pins[regs.ALTERA_AVALON_FIFO_EVENT_REG], "fifo-event", []uint32{
+			wrap(dev, &mu, &dev.brd.regs.fifo.daqCSR[rfmID].pins[regs.ALTERA_AVALON_FIFO_EVENT_REG], "fifo-event", []uint32{
 				0xffffff,
 			}, nil)
 
-			wrap(dev, &mu, &dev.regs.fifo.daqCSR[rfmID].pins[regs.ALTERA_AVALON_FIFO_IENABLE_REG], "fifo-ienable", []uint32{
+			wrap(dev, &mu, &dev.brd.regs.fifo.daqCSR[rfmID].pins[regs.ALTERA_AVALON_FIFO_IENABLE_REG], "fifo-ienable", []uint32{
 				0xffffff,
 			}, nil)
 
-			wrap(dev, &mu, &dev.regs.fifo.daqCSR[rfmID].pins[regs.ALTERA_AVALON_FIFO_ALMOSTFULL_REG], "fifo-almost-full", []uint32{
+			wrap(dev, &mu, &dev.brd.regs.fifo.daqCSR[rfmID].pins[regs.ALTERA_AVALON_FIFO_ALMOSTFULL_REG], "fifo-almost-full", []uint32{
 				128,
 			}, nil)
 
-			wrap(dev, &mu, &dev.regs.fifo.daqCSR[rfmID].pins[regs.ALTERA_AVALON_FIFO_ALMOSTEMPTY_REG], "fifo-almost-empty", []uint32{
+			wrap(dev, &mu, &dev.brd.regs.fifo.daqCSR[rfmID].pins[regs.ALTERA_AVALON_FIFO_ALMOSTEMPTY_REG], "fifo-almost-empty", []uint32{
 				255,
 			}, nil)
 
@@ -387,7 +387,7 @@ func TestDumpConfig(t *testing.T) {
 					j := 8 * (nHR*nBytesCfgHR - i - 1)
 					fmt.Fprintf(want, "%d\t%x\n", j, buf[i])
 				}
-				_, err = dev.regs.ramSC[rfmID].w(buf)
+				_, err = dev.brd.regs.ramSC[rfmID].w(buf)
 				if err != nil {
 					t.Fatalf("could not write test buffer: %+v", err)
 				}

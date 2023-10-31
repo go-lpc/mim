@@ -66,31 +66,8 @@ type Device struct {
 
 	dir string
 
-	err  error
-	buf  []byte
-	regs struct {
-		pio struct {
-			state  reg32
-			ctrl   reg32
-			pulser reg32
-
-			chkSC [nRFM]reg32
-
-			cntHit0  [nRFM]reg32
-			cntHit1  [nRFM]reg32
-			cntTrig  reg32
-			cnt48MSB reg32
-			cnt48LSB reg32
-			cnt24    reg32
-		}
-		ramSC [nRFM]hrCfg
-
-		fifo struct {
-			daq    [nRFM]reg32
-			daqCSR [nRFM]daqFIFO
-		}
-	}
-
+	err error
+	brd board
 	cfg config
 
 	daq struct {
@@ -125,11 +102,12 @@ func newDevice(devmem, odir, devshm string, opts ...Option) (*Device, error) {
 		}
 	}()
 
+	msg := log.New(os.Stdout, "eda: ", 0)
 	dev := &Device{
-		msg: log.New(os.Stdout, "eda: ", 0),
+		msg: msg,
 		dir: odir,
-		buf: make([]byte, 4),
 		cfg: newConfig(),
+		brd: newBoard(msg),
 	}
 	dev.mem.fd = mem
 
@@ -185,11 +163,12 @@ func NewDevice(fname string, odir string, opts ...Option) (*Device, error) {
 		}
 	}()
 
+	msg := log.New(os.Stdout, "eda: ", 0)
 	dev := &Device{
-		msg: log.New(os.Stdout, "eda: ", 0),
+		msg: msg,
 		dir: odir,
-		buf: make([]byte, 4),
 		cfg: newConfig(),
+		brd: newBoard(msg),
 	}
 	dev.mem.fd = mem
 	WithResetBCID(10 * time.Second)(&dev.cfg)
@@ -278,7 +257,7 @@ func (dev *Device) Configure() error {
 }
 
 func (dev *Device) configureFromCSV() error {
-	err := dev.hrscReadConf(dev.cfg.hr.fname, 0)
+	err := dev.brd.hrscReadConf(dev.cfg.hr.fname, 0)
 	if err != nil {
 		return fmt.Errorf("eda: could load single-HR configuration file: %w", err)
 	}
@@ -328,14 +307,14 @@ func (dev *Device) Initialize() error {
 
 func (dev *Device) initFPGA() error {
 	// reset FPGA and set clock.
-	err := dev.syncResetFPGA()
+	err := dev.brd.syncResetFPGA()
 	if err != nil {
 		return fmt.Errorf("eda: could not reset FPGA: %w", err)
 	}
 	time.Sleep(2 * time.Microsecond)
 	cnt := 0
 	max := 100
-	for !dev.syncPLLLock() && cnt < max {
+	for !dev.brd.syncPLLLock() && cnt < max {
 		time.Sleep(10 * time.Millisecond)
 		cnt++
 	}
@@ -343,22 +322,22 @@ func (dev *Device) initFPGA() error {
 		return fmt.Errorf("eda: could not lock PLL")
 	}
 
-	dev.msg.Printf("pll lock=%v\n", dev.syncPLLLock())
+	dev.msg.Printf("pll lock=%v\n", dev.brd.syncPLLLock())
 
 	// activate RFMs
 	for _, rfm := range dev.rfms {
-		err = dev.rfmOn(rfm)
+		err = dev.brd.rfmOn(rfm)
 		if err != nil {
 			return fmt.Errorf("eda: could not activate RFM=%d: %w", rfm, err)
 		}
-		err = dev.rfmEnable(rfm)
+		err = dev.brd.rfmEnable(rfm)
 		if err != nil {
 			return fmt.Errorf("eda: could not enable RFM=%d: %w", rfm, err)
 		}
 	}
 	time.Sleep(1 * time.Millisecond)
 
-	ctrl := dev.regs.pio.ctrl.r()
+	ctrl := dev.brd.regs.pio.ctrl.r()
 	if dev.err != nil {
 		return fmt.Errorf("eda: could not read control pio: %w", dev.err)
 	}
@@ -367,20 +346,20 @@ func (dev *Device) initFPGA() error {
 	dev.msg.Printf("trigger mode: %v", dev.cfg.daq.mode)
 	switch dev.cfg.daq.mode {
 	case "dcc":
-		err = dev.syncSelectCmdDCC()
+		err = dev.brd.syncSelectCmdDCC()
 		if err != nil {
 			return fmt.Errorf("eda: could not select DCC cmd: %w", err)
 		}
-		err = dev.syncEnableDCCBusy()
+		err = dev.brd.syncEnableDCCBusy()
 		if err != nil {
 			return fmt.Errorf("eda: could not enable DCC busy: %w", err)
 		}
-		err = dev.syncEnableDCCRAMFull()
+		err = dev.brd.syncEnableDCCRAMFull()
 		if err != nil {
 			return fmt.Errorf("eda: could not enable DCC RAM-full: %w", err)
 		}
 	case "noise":
-		err = dev.syncSelectCmdSoft()
+		err = dev.brd.syncSelectCmdSoft()
 		if err != nil {
 			return fmt.Errorf("eda: could not select SOFT cmd: %w", err)
 		}
@@ -401,14 +380,14 @@ func (dev *Device) initHR() error {
 
 func (dev *Device) initHRFromDB() error {
 	// disable trig_out output pin (RFM v1 coupling problem)
-	dev.hrscSetBit(0, 854, 0)
+	dev.brd.hrscSetBit(0, 854, 0)
 
-	dev.hrscSetRShaper(0, dev.cfg.hr.rshaper)
-	dev.hrscSetCShaper(0, dev.cfg.hr.cshaper)
+	dev.brd.hrscSetRShaper(0, dev.cfg.hr.rshaper)
+	dev.brd.hrscSetCShaper(0, dev.cfg.hr.cshaper)
 
 	// set chip IDs
 	for hr := uint32(0); hr < nHR; hr++ {
-		dev.hrscSetChipID(hr, hr+1)
+		dev.brd.hrscSetChipID(hr, hr+1)
 	}
 
 	// for each active RFM, tune the configuration and send it.
@@ -427,7 +406,7 @@ func (dev *Device) initHRFromDB() error {
 				if verbose {
 					dev.msg.Printf("%d      %d      %d\n", hr, ch, mask)
 				}
-				dev.hrscSetMask(hr, ch, mask)
+				dev.brd.hrscSetMask(hr, ch, mask)
 			}
 		}
 
@@ -443,9 +422,9 @@ func (dev *Device) initHRFromDB() error {
 			if verbose {
 				dev.msg.Printf("%d      %d      %d      %d\n", hr, th0, th1, th2)
 			}
-			dev.hrscSetDAC0(hr, th0)
-			dev.hrscSetDAC1(hr, th1)
-			dev.hrscSetDAC2(hr, th2)
+			dev.brd.hrscSetDAC0(hr, th0)
+			dev.brd.hrscSetDAC1(hr, th1)
+			dev.brd.hrscSetDAC2(hr, th2)
 		}
 
 		// set preamplifier gain
@@ -462,12 +441,12 @@ func (dev *Device) initHRFromDB() error {
 				if verbose {
 					dev.msg.Printf("%d      %d      %d\n", hr, ch, gain)
 				}
-				dev.hrscSetPreAmp(hr, ch, gain)
+				dev.brd.hrscSetPreAmp(hr, ch, gain)
 			}
 		}
 
 		// send to HRs
-		err := dev.hrscSetConfig(int(rfm))
+		err := dev.brd.hrscSetConfig(int(rfm))
 		if err != nil {
 			return fmt.Errorf(
 				"eda: could not send configuration to HR (dif=%d,slot=%d): %w",
@@ -476,7 +455,7 @@ func (dev *Device) initHRFromDB() error {
 		}
 		dev.msg.Printf("Hardroc configuration (dif=%d, RFM=%d): [done]\n", dif, rfm)
 
-		err = dev.hrscResetReadRegisters(int(rfm))
+		err = dev.brd.hrscResetReadRegisters(int(rfm))
 		if err != nil {
 			return fmt.Errorf(
 				"eda: could not reset read-registers for RFM=%d: %w",
@@ -494,22 +473,22 @@ func (dev *Device) initHRFromDB() error {
 
 func (dev *Device) initHRFromCSV() error {
 	// disable trig_out output pin (RFM v1 coupling problem)
-	dev.hrscSetBit(0, 854, 0)
+	dev.brd.hrscSetBit(0, 854, 0)
 
-	dev.hrscSetRShaper(0, dev.cfg.hr.rshaper)
-	dev.hrscSetCShaper(0, dev.cfg.hr.cshaper)
+	dev.brd.hrscSetRShaper(0, dev.cfg.hr.rshaper)
+	dev.brd.hrscSetCShaper(0, dev.cfg.hr.cshaper)
 
-	dev.hrscCopyConf(1, 0)
-	dev.hrscCopyConf(2, 0)
-	dev.hrscCopyConf(3, 0)
-	dev.hrscCopyConf(4, 0)
-	dev.hrscCopyConf(5, 0)
-	dev.hrscCopyConf(6, 0)
-	dev.hrscCopyConf(7, 0)
+	dev.brd.hrscCopyConf(1, 0)
+	dev.brd.hrscCopyConf(2, 0)
+	dev.brd.hrscCopyConf(3, 0)
+	dev.brd.hrscCopyConf(4, 0)
+	dev.brd.hrscCopyConf(5, 0)
+	dev.brd.hrscCopyConf(6, 0)
+	dev.brd.hrscCopyConf(7, 0)
 
 	// set chip IDs
 	for hr := uint32(0); hr < nHR; hr++ {
-		dev.hrscSetChipID(hr, hr+1)
+		dev.brd.hrscSetChipID(hr, hr+1)
 	}
 
 	// for each active RFM, tune the configuration and send it.
@@ -521,7 +500,7 @@ func (dev *Device) initHRFromCSV() error {
 				if verbose {
 					dev.msg.Printf("%d      %d      %d\n", hr, ch, mask)
 				}
-				dev.hrscSetMask(hr, ch, mask)
+				dev.brd.hrscSetMask(hr, ch, mask)
 			}
 		}
 
@@ -536,9 +515,9 @@ func (dev *Device) initHRFromCSV() error {
 			if verbose {
 				dev.msg.Printf("%d      %d      %d      %d\n", hr, th0, th1, th2)
 			}
-			dev.hrscSetDAC0(hr, th0)
-			dev.hrscSetDAC1(hr, th1)
-			dev.hrscSetDAC2(hr, th2)
+			dev.brd.hrscSetDAC0(hr, th0)
+			dev.brd.hrscSetDAC1(hr, th1)
+			dev.brd.hrscSetDAC2(hr, th2)
 		}
 
 		// set preamplifier gain
@@ -551,12 +530,12 @@ func (dev *Device) initHRFromCSV() error {
 				if verbose {
 					dev.msg.Printf("%d      %d      %d\n", hr, ch, gain)
 				}
-				dev.hrscSetPreAmp(hr, ch, gain)
+				dev.brd.hrscSetPreAmp(hr, ch, gain)
 			}
 		}
 
 		// send to HRs
-		err := dev.hrscSetConfig(rfm)
+		err := dev.brd.hrscSetConfig(rfm)
 		if err != nil {
 			return fmt.Errorf(
 				"eda: could not send configuration to HR (RFM=%d): %w",
@@ -565,7 +544,7 @@ func (dev *Device) initHRFromCSV() error {
 		}
 		dev.msg.Printf("Hardroc configuration (RFM=%d): [done]\n", rfm)
 
-		err = dev.hrscResetReadRegisters(rfm)
+		err = dev.brd.hrscResetReadRegisters(rfm)
 		if err != nil {
 			return fmt.Errorf(
 				"eda: could not reset read-registers for RFM=%d: %w",
@@ -606,7 +585,7 @@ func (dev *Device) startRunDCC(run uint32) error {
 		var dccCmd uint32 = 0xe
 		dev.msg.Printf("launching reset-BCID goroutine...")
 		for dccCmd != regs.CMD_RESET_BCID {
-			dccCmd = dev.syncDCCCmdMem()
+			dccCmd = dev.brd.syncDCCCmdMem()
 		}
 		dev.msg.Printf("launching reset-BCID goroutine... [done: v=0x%x]", dccCmd)
 		resetBCID <- dccCmd
@@ -622,7 +601,7 @@ func (dev *Device) startRunDCC(run uint32) error {
 		dev.msg.Printf("waiting for reset-BCID... [ok=0x%x]", v)
 	}
 
-	dev.msg.Printf("sync-state: %[1]d 0x%[1]x\n", dev.syncState())
+	dev.msg.Printf("sync-state: %[1]d 0x%[1]x\n", dev.brd.syncState())
 	for _, rfm := range dev.rfms {
 		err = dev.DumpCounters(dev.msg.Writer(), rfm)
 		if err != nil {
@@ -630,24 +609,24 @@ func (dev *Device) startRunDCC(run uint32) error {
 		}
 	}
 
-	err = dev.cntReset()
+	err = dev.brd.cntReset()
 	if err != nil {
 		return fmt.Errorf("eda: could not reset counters: %w", err)
 	}
 
-	err = dev.cntStart()
+	err = dev.brd.cntStart()
 	if err != nil {
 		return fmt.Errorf("eda: could not start counters: %w", err)
 	}
 
 	for _, rfm := range dev.rfms {
-		err = dev.daqFIFOInit(rfm)
+		err = dev.brd.daqFIFOInit(rfm)
 		if err != nil {
 			return fmt.Errorf("eda: could not initialize DAQ FIFO (RFM=%d): %w", rfm, err)
 		}
 	}
 
-	err = dev.syncArmFIFO()
+	err = dev.brd.syncArmFIFO()
 	if err != nil {
 		return fmt.Errorf("eda: could not arm FIFO: %w", err)
 	}
@@ -661,28 +640,28 @@ func (dev *Device) startRunDCC(run uint32) error {
 func (dev *Device) startRunNoise(run uint32) error {
 	var err error
 	for _, rfm := range dev.rfms {
-		err = dev.daqFIFOInit(rfm)
+		err = dev.brd.daqFIFOInit(rfm)
 		if err != nil {
 			return fmt.Errorf("eda: could not initialize DAQ FIFO (RFM=%d): %w", rfm, err)
 		}
 	}
 
-	err = dev.cntReset()
+	err = dev.brd.cntReset()
 	if err != nil {
 		return fmt.Errorf("eda: could not reset counters: %w", err)
 	}
 
-	err = dev.syncResetBCID()
+	err = dev.brd.syncResetBCID()
 	if err != nil {
 		return fmt.Errorf("eda: could not reset BCID: %w", err)
 	}
 
-	err = dev.syncStart()
+	err = dev.brd.syncStart()
 	if err != nil {
 		return fmt.Errorf("eda: could not start acquisition: %w", err)
 	}
 
-	err = dev.syncArmFIFO()
+	err = dev.brd.syncArmFIFO()
 	if err != nil {
 		return fmt.Errorf("eda: could not arm FIFO: %w", err)
 	}
@@ -729,7 +708,7 @@ func (dev *Device) initRun(run uint32) error {
 
 	dev.msg.Printf("-----------------RUN NB %d-----------------\n", run)
 	fname = path.Join(dev.dir, fmt.Sprintf("hr_sc_%03d.csv", run))
-	err = dev.hrscWriteConfHRs(fname)
+	err = dev.brd.hrscWriteConfHRs(fname)
 	if err != nil {
 		return fmt.Errorf(
 			"eda: could not write HR config file %q: %w",
@@ -737,7 +716,7 @@ func (dev *Device) initRun(run uint32) error {
 		)
 	}
 
-	err = dev.syncResetHR()
+	err = dev.brd.syncResetHR()
 	if err != nil {
 		return fmt.Errorf("eda: could not reset hardroc: %w", err)
 	}
@@ -814,7 +793,7 @@ func (dev *Device) loopDCC() {
 		// wait until readout is done
 	readout:
 		for {
-			state := dev.syncState()
+			state := dev.brd.syncState()
 			switch state {
 			case regs.S_START_RO:
 				printf(w, "ro-") // readout of HR
@@ -837,7 +816,7 @@ func (dev *Device) loopDCC() {
 		for i, rfm := range dev.rfms {
 			dev.daqWriteDIFData(dev.daq.rfm[i].w, rfm)
 		}
-		err = dev.syncAckFIFO()
+		err = dev.brd.syncAckFIFO()
 		if err != nil {
 			errorf("eda: could not ACK FIFO: %w", err)
 			return
@@ -910,7 +889,7 @@ func (dev *Device) loopNoise() {
 		// wait until readout is done
 	readout:
 		for {
-			state := dev.syncState()
+			state := dev.brd.syncState()
 			switch {
 			case state >= regs.S_RAMFULL:
 				break readout
@@ -924,7 +903,7 @@ func (dev *Device) loopNoise() {
 			}
 		}
 		printf(w, "ramfull-")
-		err = dev.syncRAMFullExt()
+		err = dev.brd.syncRAMFullExt()
 		if err != nil {
 			errorf("could not set RAMFULL: %+v", err)
 			return
@@ -932,7 +911,7 @@ func (dev *Device) loopNoise() {
 
 	dataReady:
 		for {
-			state := dev.syncState()
+			state := dev.brd.syncState()
 			switch {
 			case state >= regs.S_FIFO_READY:
 				break dataReady
@@ -952,7 +931,7 @@ func (dev *Device) loopNoise() {
 		for i, rfm := range dev.rfms {
 			dev.daqWriteDIFData(dev.daq.rfm[i].w, rfm)
 		}
-		err = dev.syncAckFIFO()
+		err = dev.brd.syncAckFIFO()
 		if err != nil {
 			errorf("eda: could not ACK FIFO: %w", err)
 			return
@@ -987,7 +966,7 @@ func (dev *Device) loopNoise() {
 			dev.daq.done <- 1
 			return
 		default:
-			err = dev.syncStart()
+			err = dev.brd.syncStart()
 			if err != nil {
 				errorf("eda: could not start acquisition: %w", err)
 				return
@@ -1015,30 +994,30 @@ func (dev *Device) Stop() error {
 	var err error
 	switch dev.cfg.daq.mode {
 	case "dcc":
-		err = dev.cntStop()
+		err = dev.brd.cntStop()
 		if err != nil {
 			return fmt.Errorf("eda: could not stop counters: %w", err)
 		}
 	case "noise":
-		err = dev.syncStop()
+		err = dev.brd.syncStop()
 		if err != nil {
 			return fmt.Errorf("eda: could not stop acquisition: %w", err)
 		}
-		err = dev.cntStop()
+		err = dev.brd.cntStop()
 		if err != nil {
 			return fmt.Errorf("eda: could not stop counters: %w", err)
 		}
 	}
 
-	err = dev.cntReset()
+	err = dev.brd.cntReset()
 	if err != nil {
 		return fmt.Errorf("eda: could not reset counters: %w", err)
 	}
-	err = dev.syncResetFPGA()
+	err = dev.brd.syncResetFPGA()
 	if err != nil {
 		return fmt.Errorf("eda: could not reset FPGA: %w", err)
 	}
-	err = dev.syncResetHR()
+	err = dev.brd.syncResetHR()
 	if err != nil {
 		return fmt.Errorf("eda: could not reset Hardroc: %w", err)
 	}
@@ -1078,7 +1057,7 @@ func (dev *Device) Close() error {
 
 func (dev *Device) DumpFIFOStatus(w io.Writer, rfm int) error {
 	var (
-		fifo   = &dev.regs.fifo.daqCSR[rfm]
+		fifo   = &dev.brd.regs.fifo.daqCSR[rfm]
 		buf    = bufio.NewWriter(w)
 		err    error
 		printf = func(format string, args ...interface{}) {
@@ -1154,12 +1133,12 @@ func (dev *Device) DumpCounters(w io.Writer, rfm int) error {
 	printf("cnt48_msb;cnt48_lsb;cnt24\n")
 	printf("%d;%d;%d;%d;",
 		dev.daq.rfm[rfm].cycle,
-		dev.cntHit0(rfm),
-		dev.cntHit1(rfm),
-		dev.cntTrig(),
+		dev.brd.cntHit0(rfm),
+		dev.brd.cntHit1(rfm),
+		dev.brd.cntTrig(),
 	)
 	printf("%d;%d;%d\n",
-		dev.cntBCID48MSB(), dev.cntBCID48LSB(), dev.cntBCID24(),
+		dev.brd.cntBCID48MSB(), dev.brd.cntBCID48LSB(), dev.brd.cntBCID24(),
 	)
 
 	if err != nil {
@@ -1177,7 +1156,7 @@ func (dev *Device) DumpConfig(w io.Writer, rfm int) error {
 	buf := bufio.NewWriter(w)
 	defer buf.Flush()
 
-	ram := &dev.regs.ramSC[rfm]
+	ram := &dev.brd.regs.ramSC[rfm]
 	for i := 0; i < szCfgHR; i++ {
 		j := 8 * (nHR*nBytesCfgHR - i - 1)
 		v := ram.r(i)
@@ -1193,7 +1172,7 @@ func (dev *Device) DumpRegisters(w io.Writer) error {
 	const (
 		lvl = regs.ALTERA_AVALON_FIFO_LEVEL_REG
 	)
-	regs := &dev.regs
+	regs := &dev.brd.regs
 
 	fmt.Fprintf(w, "pio.state=       0x%08x\n", regs.pio.state.r())
 	fmt.Fprintf(w, "pio.ctrl=        0x%08x\n", regs.pio.ctrl.r())
@@ -1229,7 +1208,7 @@ func (dev *Device) DumpRegisters(w io.Writer) error {
 		7: "fifo ready",
 		8: "stop run",
 	}
-	state := dev.syncState()
+	state := dev.brd.syncState()
 	fmt.Fprintf(w, "synchro FSM state= %d (%s)\n", state, names[state])
 	return dev.err
 }
