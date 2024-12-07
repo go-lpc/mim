@@ -173,14 +173,14 @@ func (*fakeDev) fpga(dev *Device, rfmID int, rfmDone uint32, exhaust func()) {
 	}...)
 
 	var mu sync.RWMutex
-	wrap(dev, &mu, &dev.regs.pio.ctrl, "pio.ctrl", fakeCtrl, exhaust)
-	wrap(dev, &mu, &dev.regs.pio.state, "pio.state", fakeState, exhaust)
-	wrap(dev, &mu, &dev.regs.pio.chkSC[rfmID], "pio.chk-sc", fakeChkSC, exhaust)
-	wrap(dev, &mu, &dev.regs.pio.cnt24, "pio.cnt24", fakeCnt24, exhaust)
+	wrap(dev, &mu, &dev.brd.regs.pio.ctrl, "pio.ctrl", fakeCtrl, exhaust)
+	wrap(dev, &mu, &dev.brd.regs.pio.state, "pio.state", fakeState, exhaust)
+	wrap(dev, &mu, &dev.brd.regs.pio.chkSC[rfmID], "pio.chk-sc", fakeChkSC, exhaust)
+	wrap(dev, &mu, &dev.brd.regs.pio.cnt24, "pio.cnt24", fakeCnt24, exhaust)
 
 	wrap(
 		dev, &mu,
-		&dev.regs.fifo.daqCSR[rfmID].pins[regs.ALTERA_AVALON_FIFO_STATUS_REG],
+		&dev.brd.regs.fifo.daqCSR[rfmID].pins[regs.ALTERA_AVALON_FIFO_STATUS_REG],
 		"fifo.daq-csr[rfm]",
 		fakeDaqCSR,
 		exhaust,

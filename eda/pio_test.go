@@ -22,9 +22,9 @@ func TestReadConf(t *testing.T) {
 			hrID uint32
 		)
 		dev.cfg.hr.db = newDbConfig()
-		dev.cfg.hr.data = dev.cfg.hr.buf[4:]
+		dev.brd = newBoard(dev.msg)
 
-		err := dev.hrscReadConf("testdata/conf_base.csv", hrID)
+		err := dev.brd.hrscReadConf("testdata/conf_base.csv", hrID)
 		if err != nil {
 			t.Fatalf("could not read config file: %+v", err)
 		}
@@ -40,7 +40,7 @@ func TestReadConf(t *testing.T) {
 			{addr: 871, want: 1},
 		} {
 			t.Run(fmt.Sprintf("addr=%d", tc.addr), func(t *testing.T) {
-				got := dev.hrscGetBit(hrID, tc.addr)
+				got := dev.brd.hrscGetBit(hrID, tc.addr)
 				if got != tc.want {
 					t.Fatalf("invalid value: got=0x%x, want=0x%x", got, tc.want)
 				}
@@ -102,14 +102,14 @@ func TestReadConf(t *testing.T) {
 				fname = filepath.Join(tmp, tc.name+".txt")
 			)
 			dev.cfg.hr.db = newDbConfig()
-			dev.cfg.hr.data = dev.cfg.hr.buf[4:]
+			dev.brd = newBoard(dev.msg)
 
 			err := os.WriteFile(fname, []byte(tc.data), 0644)
 			if err != nil {
 				t.Fatalf("could not create tmp file: %+v", err)
 			}
 
-			err = dev.hrscReadConf(fname, hrID)
+			err = dev.brd.hrscReadConf(fname, hrID)
 			if err == nil {
 				t.Fatalf("expected an error")
 			}
@@ -125,9 +125,9 @@ func TestReadConfHR(t *testing.T) {
 	t.Run("valid-hr", func(t *testing.T) {
 		var dev Device
 		dev.cfg.hr.db = newDbConfig()
-		dev.cfg.hr.data = dev.cfg.hr.buf[4:]
+		dev.brd = newBoard(dev.msg)
 
-		err := dev.hrscReadConfHRs("testdata/hr_sc_385.csv")
+		err := dev.brd.hrscReadConfHRs("testdata/hr_sc_385.csv")
 		if err != nil {
 			t.Fatalf("could not read hr-sc cfg: %+v", err)
 		}
@@ -150,7 +150,7 @@ func TestReadConfHR(t *testing.T) {
 			{hr: 7, addr: 871, want: 1},
 		} {
 			t.Run(fmt.Sprintf("hr=%d-addr=%d", tc.hr, tc.addr), func(t *testing.T) {
-				got := dev.hrscGetBit(tc.hr, tc.addr)
+				got := dev.brd.hrscGetBit(tc.hr, tc.addr)
 				if got != tc.want {
 					t.Fatalf("invalid value: got=0x%x, want=0x%x", got, tc.want)
 				}
@@ -225,14 +225,14 @@ func TestReadConfHR(t *testing.T) {
 				fname = filepath.Join(tmp, tc.name+".txt")
 			)
 			dev.cfg.hr.db = newDbConfig()
-			dev.cfg.hr.data = dev.cfg.hr.buf[4:]
+			dev.brd = newBoard(dev.msg)
 
 			err := os.WriteFile(fname, []byte(tc.data), 0644)
 			if err != nil {
 				t.Fatalf("could not create tmp file: %+v", err)
 			}
 
-			err = dev.hrscReadConfHRs(fname)
+			err = dev.brd.hrscReadConfHRs(fname)
 			if err == nil {
 				t.Fatalf("expected an error")
 			}
@@ -248,9 +248,9 @@ func TestReadWriteConfHR(t *testing.T) {
 	var dev Device
 
 	dev.cfg.hr.db = newDbConfig()
-	dev.cfg.hr.data = dev.cfg.hr.buf[4:]
+	dev.brd = newBoard(dev.msg)
 
-	err := dev.hrscReadConfHRs("testdata/hr_sc_385.csv")
+	err := dev.brd.hrscReadConfHRs("testdata/hr_sc_385.csv")
 	if err != nil {
 		t.Fatalf("could not read hr-sc cfg: %+v", err)
 	}
@@ -261,7 +261,7 @@ func TestReadWriteConfHR(t *testing.T) {
 	}
 	_ = tmp.Close()
 
-	err = dev.hrscWriteConfHRs(tmp.Name())
+	err = dev.brd.hrscWriteConfHRs(tmp.Name())
 	if err != nil {
 		t.Fatalf("could not write hr-sc cfg: %+v", err)
 	}
